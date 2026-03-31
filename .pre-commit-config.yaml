@@ -1,0 +1,37 @@
+repos:
+  # Standard file cleanup
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-added-large-files
+
+  # Ruff: The modern linter/formatter
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.9.4
+    hooks:
+      - id: ruff
+        args: [ --fix ]
+      - id: ruff-format
+
+  # Reflex: Compile frontend before commit
+  - repo: local
+    hooks:
+      - id: reflex-compile
+        name: Reflex Compile
+        entry: uv run reflex compile
+        language: system
+        pass_filenames: false
+        always_run: true
+
+  - repo: local
+    hooks:
+      - id: coverage
+        name: Test coverage
+        entry: make test-cov-simple
+        language: system
+        pass_filenames: false
+        always_run: true
