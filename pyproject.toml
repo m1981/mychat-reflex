@@ -7,3 +7,62 @@ requires-python = ">=3.14"
 dependencies = [
     "reflex>=0.8.28.post1",
 ]
+
+[tool.setuptools]
+packages = ["school_hub"]
+
+[dependency-groups]
+dev = [
+    "playwright>=1.58.0",
+    "pytest>=9.0.2",
+    "pytest-cov>=7.1.0",
+    "pytest-playwright>=0.7.2",
+]
+
+[tool.pytest.ini_options]
+pythonpath = "."
+testpaths = ["tests"]
+markers = [
+    "unit: marks tests as unit tests (fast, no external dependencies)",
+    "integration: marks tests as integration tests (may use external resources)",
+    "ui: marks tests as UI tests (requires Playwright and running app)",
+    "slow: marks tests as slow running tests",
+]
+# REMOVED "--cov=src ..." from here. We will move it to the Makefile.
+# This prevents coverage from running automatically when you just want to debug a single test.
+addopts = "-v"
+
+filterwarnings = [
+    "ignore::ResourceWarning",
+    # Silence the Pydantic warning we discussed earlier
+    "ignore:Using `@model_validator` with mode='after' on a classmethod is deprecated:pydantic.warnings.PydanticDeprecatedSince20"
+]
+[tool.coverage.run]
+source = ["school_hub"]
+branch = true
+omit = [
+    "*/__init__.py",
+    "tests/*",
+    "*/__pycache__/*",
+    "*/tests/*"
+]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 80
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:",
+    "@abstractmethod"
+]
