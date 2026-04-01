@@ -30,3 +30,23 @@ We will utilize the **MVVM (Model-View-ViewModel)** pattern for the presentation
 *   **Positive:** Clean separation of concerns. UI components (Views) remain "dumb" and only care about rendering, while the ViewModel handles the complex logic of accumulating SSE streaming chunks.
 *   **Positive:** Highly reactive UX. When a Note is created in the Chat ViewModel, the Notes Sidebar ViewModel can react and update instantly.
 *   **Negative:** Requires careful state management to avoid memory leaks or infinite re-render loops during high-speed text streaming.
+
+*****
+
+## ADR 014: Reflex State and UI Guidelines
+**Status:** Accepted
+
+### Context
+Reflex compiles Python to React and synchronizes state via WebSockets. Improper use of Reflex state can lead to massive JSON payloads, frozen UIs, and compile-time bugs.
+
+### Decision
+We will strictly adhere to the following Reflex-specific patterns:
+1.  **UI Logic Only:** `rx.State` classes will act strictly as ViewModels. They will not contain SQL queries or API calls; they will delegate to the Application Use Cases.
+2.  **Background Streaming:** Any Use Case that takes longer than 200ms (e.g., LLM generation, Vector DB search) must be executed within an `@rx.background` task to prevent WebSocket locking.
+3.  **Backend-Only Variables:** Any data retrieved from Use Cases that does not need to be rendered in the DOM (e.g., raw vector embeddings, database session objects) must be stored in variables prefixed with `_` to prevent WebSocket serialization.
+4.  **Runtime Conditionals:** Standard Python `if/else` statements are banned for UI rendering logic. `rx.cond` or `rx.match` must be used to ensure React AST compilation is correct.
+
+### Consequences
+*   **Positive:** Guarantees a 60fps, non-blocking User Experience.
+*   **Positive:** Prevents accidental data leaks to the browser.
+*   **Negative:** Developers must learn the difference between compile-time Python and runtime Reflex state.
