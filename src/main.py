@@ -4,6 +4,9 @@ import uvicorn
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from src.features.chat.presentation.routes import router as chat_router
 from src.core.database.session import init_db

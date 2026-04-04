@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 class AnthropicAdapter(ILLMService):
-    def __init__(self, api_key: str, model: str = "claude-3-5-sonnet-20241022"):
+    def __init__(self, api_key: str, model: str = "claude-sonnet-4-5"):
         self.client = AsyncAnthropic(api_key=api_key)
         self.model = model
 
@@ -104,8 +104,8 @@ class AnthropicAdapter(ILLMService):
         # Add temperature (Anthropic supports it for all models)
         kwargs["temperature"] = config.temperature
 
-        # Handle extended thinking (Claude 3.7 Sonnet feature)
-        if config.enable_reasoning and "claude-3-7-sonnet" in self.model:
+        # Handle extended thinking
+        if config.enable_reasoning and "claude-sonnet-4-5" in self.model:
             kwargs["thinking"] = {
                 "type": "enabled",
                 "budget_tokens": config.reasoning_budget or 2000,

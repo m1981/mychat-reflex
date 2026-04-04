@@ -25,7 +25,7 @@ def get_vector_store() -> MockVectorStore:
 
 def get_llm_service() -> AnthropicAdapter:
     api_key = os.getenv("ANTHROPIC_API_KEY", "your-api-key-here")
-    return AnthropicAdapter(api_key=api_key, model="claude-3-5-sonnet-20241022")
+    return AnthropicAdapter(api_key=api_key, model="claude-sonnet-4-5")
 
 
 def get_prompt_builder() -> RAGPromptBuilder:
