@@ -13,6 +13,11 @@ help: ## Display this help
 		/^[a-zA-Z0-9_-]+:.*?##/ { printf "  $(YELLOW)%-20s$(RESET) %s\n", $$1, $$2 } \
 		/^##@/ { printf "\n$(GREEN)%s$(RESET)\n", substr($$0, 5) }' $(MAKEFILE_LIST)
 
+
+.PHONY: run
+run: ## Run the Streamlit application
+	uv run reflex run
+
 .PHONY: test-cov
 test-cov: ## Run UNIT tests with strict coverage (Fail under 80%, excludes UI and integration tests)
 	@echo "$(GREEN)Running Unit Tests with Coverage Check...$(RESET)"
