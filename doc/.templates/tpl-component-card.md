@@ -18,9 +18,12 @@ DON'TS:
 
 *   **Layer:** [Domain | Application (Use Case) | Infrastructure (Adapter) | Presentation (API)]
 *   **Responsibility:** [What is the single responsibility of this module?]
-*   **Input:** `[Data Type]` - [Description]
-*   **Output:** `[Data Type]` - [Description]
-*   **Throws/Errors:** `[Exception Types]`
+*   **Input:** `[Data Type]`
+*   **Output:** `[Data Type]`
+*   **Injected Interfaces (Ports):** 
+    *   [Emoji] `[Interface Name, e.g., IVectorStore]` - [Why it's needed]
+*   **Concrete Dependencies (Only if Infrastructure/Presentation):**
+    *   [Emoji] `[Library/DB, e.g., chromadb, fastapi]`
 
 ## Dependencies (Dependency Inversion)
 *   **Injected Interfaces (Ports):** 
