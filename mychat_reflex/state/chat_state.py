@@ -41,7 +41,7 @@ class ChatState(rx.State):
 
     # --- ADR 014: Backend-Only Variables ---
     # Prefixed with '_' so Reflex does not serialize this to the browser
-    _api_base_url: str = "http://localhost:8000"
+    _api_base_url: str = "http://localhost:8080"
 
     # UI State
     is_generating: bool = False
@@ -163,25 +163,36 @@ class ChatState(rx.State):
         self.input_text = ""
         self.is_generating = True
 
-        # Yield immediately to push the user message and empty AI bubble to the UI
+        print("[DEBUG] Yielding optimistic UI update...")
         yield
 
-        # 4. Chain the streaming event handler
+        print(f"[DEBUG] Chaining stream_response for msg_id: {ai_msg_id}...")
         yield ChatState.stream_response(prompt, ai_msg_id)
 
     async def stream_response(self, prompt: str, message_id: str):
-        """
-        Streams the response from the FastAPI backend.
-        Every 'yield' automatically syncs the state to the frontend without blocking.
-        """
+        """Streams the response from the FastAPI backend."""
+        print(f"[DEBUG] stream_response started. Prompt: '{prompt}'")
+
         chat_id = self.current_chat_id
         api_url = f"{self._api_base_url}/chat/{chat_id}/stream"
+        print(f"[DEBUG] Target API URL: {api_url}")
 
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
+                print("[DEBUG] Sending POST request to backend...")
+
                 async with client.stream(
                     "POST", api_url, json={"content": prompt}
                 ) as response:
+                    print(f"[DEBUG] HTTP Response Status: {response.status_code}")
+
+                    # CRITICAL FIX: Catch 404s, 500s, and port conflicts!
+                    if response.status_code != 200:
+                        error_text = await response.aread()
+                        raise Exception(
+                            f"HTTP {response.status_code}: {error_text.decode('utf-8')[:100]}"
+                        )
+
                     current_event = "message"
 
                     # Parse the Server-Sent Events (SSE) stream
@@ -189,6 +200,10 @@ class ChatState(rx.State):
                         line = line.strip()
                         if not line:
                             continue
+
+                        print(
+                            f"[DEBUG] Received SSE Line: {line}"
+                        )  # Log raw stream data
 
                         if line.startswith("event:"):
                             current_event = line.split(":", 1)[1].strip()
@@ -216,11 +231,9 @@ class ChatState(rx.State):
                                         yield  # Push status to UI
 
                                     elif current_event == "sources_found":
-                                        sources = data
-                                        notes = "### Retrieved Sources\n\n"
-                                        for idx, src in enumerate(sources):
-                                            notes += f"**Source {idx + 1}:** {src.get('text')[:100]}...\n\n"
-                                        self.notes_content = notes
+                                        self.notes_content = (
+                                            "### Retrieved Sources\n\n" + str(data)
+                                        )
                                         self.messages[msg_idx].content = ""
                                         yield  # Push notes panel update to UI
 
@@ -239,22 +252,19 @@ class ChatState(rx.State):
                                         yield  # Push error to UI
 
                             except json.JSONDecodeError:
-                                pass  # Ignore malformed JSON chunks
+                                print(f"[DEBUG] Failed to parse JSON: {data_str}")
 
         except Exception as e:
+            print(f"[ERROR] stream_response failed: {str(e)}")
             msg_idx = next(
                 (i for i, m in enumerate(self.messages) if m.id == message_id), None
             )
             if msg_idx is not None:
-                self.messages[
-                    msg_idx
-                ].content += (
-                    f"\n\n**Connection Error:** Could not reach backend ({str(e)})"
-                )
+                self.messages[msg_idx].content += f"\n\n**Connection Error:** {str(e)}"
                 yield
 
         finally:
-            # Unlock the UI when the stream finishes or fails
+            print("[DEBUG] stream_response finished. Unlocking UI.")
             self.is_generating = False
             yield
 
