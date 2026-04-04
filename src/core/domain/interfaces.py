@@ -1,13 +1,14 @@
 from abc import ABC, abstractmethod
 from typing import AsyncGenerator, List, Optional
-from .entities import ChatMessage, SearchResult
+from .entities import ChatMessage, SearchResult, LLMConfig, Role
 
 
 class ILLMService(ABC):
     @abstractmethod
     async def generate_stream(
-            self,
-            messages: List[ChatMessage]
+        self,
+        messages: List[ChatMessage],
+        config: Optional[LLMConfig] = None,  # <-- Added config parameter
     ) -> AsyncGenerator[str, None]:
         """Yields text chunks from the LLM (OpenAI, Anthropic, Local)."""
         pass
