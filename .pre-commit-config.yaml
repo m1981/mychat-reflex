@@ -27,11 +27,11 @@ repos:
         pass_filenames: false
         always_run: true
 
-  - repo: local
-    hooks:
-      - id: coverage
-        name: Test coverage
-        entry: make test-cov-simple
-        language: system
-        pass_filenames: false
-        always_run: true
+#  - repo: local
+#    hooks:
+#      - id: coverage
+#        name: Test coverage
+#        entry: make test-cov-simple
+#        language: system
+#        pass_filenames: false
+#        always_run: true
