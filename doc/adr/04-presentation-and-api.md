@@ -1,18 +1,16 @@
-## ADR 002: Server-Sent Events (SSE) with Structured JSON for Chat
-**Status:** Accepted
+## ADR 002-V2: Native WebSocket Streaming via Reflex State
+**Status:** Accepted (Replaces ADR 002)
 
 ### Context
-The application requires a ChatGPT-like streaming experience. The UI needs to display intermediate states (e.g., "Searching documents...", "Found 3 sources") before and during the text generation. Streaming raw text makes it impossible for the frontend to parse metadata, citations, or tool usage. WebSockets provide bidirectional streaming but introduce significant state-management overhead.
+Streaming LLM responses (like ChatGPT) requires pushing text chunks to the UI in real-time. Previously, we planned to use Server-Sent Events (SSE) via FastAPI.
 
 ### Decision
-We will use **Server-Sent Events (SSE)** via FastAPI's `StreamingResponse`. The backend will yield structured JSON payloads (e.g., `{"event": "sources", "data": [...]}` and `{"event": "chunk", "data": "text"}`) rather than raw strings.
+Because we adopted the Full-Stack Monolith (ADR 011), we will use **Reflex's native WebSocket reactivity**. The Use Case will yield raw text chunks using standard Python `async for` generators. The `rx.State` will append these chunks to the unified `rx.Model` and `yield`, allowing Reflex to automatically push the diff to the browser.
 
 ### Consequences
-*   **Positive:** Unidirectional flow is perfectly suited for LLM generation.
-*   **Positive:** Frontend can easily parse JSON to update distinct UI components (citations vs. markdown text).
-*   **Negative:** Requires custom parsing logic on the frontend to accumulate the JSON chunks.
-
-***
+*   **Positive:** Zero network protocol coding required. No JSON serialization/deserialization for text chunks.
+*   **Positive:** UI updates are perfectly synchronized with the backend state.
+*   **Negative:** Reflex WebSockets can occasionally drop connections on unstable mobile networks compared to raw SSE, requiring robust error handling in the `rx.State`.
 
 ## ADR 013: MVVM Pattern for Frontend Presentation
 **Status:** Accepted
@@ -21,7 +19,7 @@ We will use **Server-Sent Events (SSE)** via FastAPI's `StreamingResponse`. The 
 The application requires a highly interactive User Interface. It must handle real-time streaming text, optimistic UI updates (showing a message before the database confirms it), and synchronized state between the Chat area and the Notes sidebar. Traditional MVC (where the server renders static HTML views) cannot support this level of interactivity.
 
 ### Decision
-We will utilize the **MVVM (Model-View-ViewModel)** pattern for the presentation layer. 
+We will utilize the **MVVM (Model-View-ViewModel)** pattern for the presentation layer.
 *   **Model:** The backend Domain Entities and Use Cases.
 *   **View:** The UI components (React components or Reflex UI functions).
 *   **ViewModel:** The frontend State manager (e.g., Reflex `State` classes or React hooks/Zustand). The ViewModel will hold the current state of the UI, handle user intents, call the backend APIs, and automatically trigger View updates when data changes.

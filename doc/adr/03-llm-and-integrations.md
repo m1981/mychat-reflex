@@ -2,52 +2,46 @@
 **Status:** Accepted
 
 ### Context
-The project currently uses ChromaDB and local/OpenAI models, but has a strict requirement to migrate to Voyage AI in the future. Tying the application logic directly to ChromaDB or OpenAI SDKs will require a massive rewrite during the migration.
+We must protect our core business logic from the volatility of external AI providers (OpenAI, Anthropic, Gemini).
 
 ### Decision
-We will apply the **Dependency Inversion Principle (DIP)**. The core domain will define strict interfaces (`IVectorStore`, `ILLMService`). The application Use Cases will only depend on these interfaces. External SDKs (Chroma, Voyage, OpenAI) will be wrapped in Adapter classes located in the `infrastructure/` layer.
+While we compromised on the Data Model (ADR 005-V2), we will **strictly enforce Clean Architecture for external services**. The Use Cases will only depend on an `ILLMService` interface. External SDKs will be wrapped in Adapter classes located in a shared `infrastructure/` layer.
 
 ### Consequences
-*   **Positive:** Migrating to Voyage AI requires writing exactly one new class (`VoyageAdapter`) and changing one line in the Dependency Injection container.
-*   **Positive:** Enables blazing-fast unit/integration testing by injecting Fake adapters.
+*   **Positive:** We can swap AI providers or add local models (Ollama) without touching the Use Cases or the UI.
+*   **Positive:** Enables blazing-fast, zero-cost unit/integration testing by injecting Fake adapters instead of hitting real APIs.
 *   **Negative:** Requires defining and maintaining interface contracts.
 
 ---
 
 ## ADR 007: Custom LLM Adapters over Third-Party Abstractions
 **Status:** Accepted
-**Date:** 2023-10-26
 
 ### Context
 The application must support multiple LLM providers (OpenAI, Anthropic, Gemini) and handle advanced, provider-specific features such as multimodal attachments (images/PDFs) and reasoning/thinking budgets. We evaluated using third-party abstraction libraries (LiteLLM, LangChain) versus building Custom Adapters implementing our own `ILLMService` interface.
 
 ### Decision
-We will build **Custom Adapters** in the `infrastructure/llm/` layer. The Domain layer will define generic configurations (e.g., `LLMConfig`, `ImagePart`), and each Adapter will be strictly responsible for translating these generic concepts into the provider's specific JSON schema.
+We will build **Custom Adapters** implementing our `ILLMService` interface. The Domain will define generic configurations (`LLMConfig`), and each Adapter will translate these into the provider's specific JSON schema.
 
 ### Consequences
-*   **Positive:** The core Use Cases remain 100% agnostic to provider API changes.
-*   **Positive:** We can adopt day-one features (e.g., a new Claude "thinking" parameter) immediately without waiting for an open-source library to update.
-*   **Negative:** Increased maintenance burden. We must manually write the JSON mapping logic for new providers.
+*   **Positive:** We can adopt day-one features immediately.
+*   **Negative:** Increased maintenance burden to write JSON mapping logic for new providers.
 
 ---
 
-## ADR 008: Normalization of Advanced Reasoning ("Thinking") Edge Cases
+## ADR 008: Normalization of Advanced Reasoning Edge Cases
 **Status:** Accepted
 
 ### Context
-Different LLM providers implement "System 2" reasoning entirely differently, creating severe edge cases:
-1.  **Anthropic (Claude 3.7):** Requires a `thinking` block with a `budget_tokens` integer. **Crucially, it strictly requires `temperature=1.0`** when thinking is enabled. If you pass `temperature=0.7`, the API throws a 400 error.
-2.  **OpenAI (o1 / o3-mini):** Uses a `reasoning_effort` string (`"low"`, `"medium"`, `"high"`). **Crucially, it does not support the `temperature` parameter at all.** If you pass `temperature`, the API throws a 400 error.
+Different LLM providers implement reasoning differently, creating severe edge cases:
+1. Anthropic: Requires a `thinking` block and strictly requires `temperature=1.0`.
+2. OpenAI (o1/o3): Uses `reasoning_effort` and strictly forbids the `temperature` parameter.
 
 ### Decision
-The Domain layer will expose a generic `LLMConfig(enable_reasoning: bool, reasoning_budget: int)`.
-The Adapters will absorb the edge cases:
-*   The `AnthropicAdapter` will intercept `enable_reasoning=True`, map the budget, and **force-override** the temperature to `1.0` before making the HTTP call.
-*   The `OpenAIAdapter` will intercept `enable_reasoning=True`, map the integer budget to a `"high"/"medium"/"low"` string heuristic, and **strip** the `temperature` parameter from the payload entirely.
+The Domain exposes a generic `LLMConfig(enable_reasoning: bool)`. The Adapters absorb the edge cases (e.g., the `AnthropicAdapter` force-overrides temperature to 1.0; the `OpenAIAdapter` strips the temperature parameter entirely).
 
 ### Consequences
-*   **Positive:** The `SendMessageUseCase` does not need `if provider == 'anthropic'` logic. It simply requests reasoning, and the Adapter ensures the API call doesn't crash.
-*   **Positive:** Prevents 400 Bad Request errors caused by conflicting parameters.
+*   **Positive:** The Use Case simply requests reasoning, and the Adapter ensures the API call doesn't crash with a 400 Bad Request.
 
 ---
 
@@ -55,19 +49,13 @@ The Adapters will absorb the edge cases:
 **Status:** Accepted
 
 ### Context
-The concept of a "System Prompt" is handled inconsistently across the industry:
-1.  **OpenAI (gpt-4o):** Accepts `{"role": "system", "content": "..."}` as the first message in the array.
-2.  **OpenAI (o1-preview):** **Does not support the `system` role.** It requires system instructions to be passed as the `user` role, or in newer models, the `developer` role.
-3.  **Anthropic:** Does not allow `system` in the messages array. It must be passed as a top-level parameter (`anthropic.messages.create(system="...", messages=[...])`).
+The "System Prompt" is handled inconsistently:
+1. OpenAI (gpt-4o): Uses `{"role": "system"}`.
+2. OpenAI (o1): Forbids `system`, requires `developer` or `user`.
+3. Anthropic: Forbids `system` in the array, requires a top-level `system=` kwarg.
 
 ### Decision
-The Domain layer will continue to use `ChatMessage(role=Role.SYSTEM)`.
-The Adapters will be responsible for "System Prompt Resolution":
-*   `OpenAIAdapter` (for `gpt-4o`): Passes it through normally.
-*   `OpenAIAdapter` (for `o1`): Intercepts the `SYSTEM` role and mutates it to `DEVELOPER` or prepends it to the first `USER` message.
-*   `AnthropicAdapter`: Extracts all `SYSTEM` messages from the array, concatenates them, removes them from the message list, and passes them to the top-level `system=` kwarg.
+The Domain will exclusively use `Role.SYSTEM`. The Adapters will be responsible for "System Prompt Resolution" (e.g., AnthropicAdapter extracts it from the array and moves it to the top-level kwarg).
 
 ### Consequences
-*   **Positive:** The `RAGPromptBuilder` domain service can safely generate `Role.SYSTEM` messages without worrying about which model the user selected. The architecture remains pure.
-
-Here are the Architecture Decision Records (ADRs) documenting the high-level structural patterns we just discussed. You can append these directly to your `adrs.md` file.
+*   **Positive:** The `RAGPromptBuilder` can safely generate `Role.SYSTEM` messages without worrying about which model the user selected.

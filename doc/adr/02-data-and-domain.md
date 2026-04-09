@@ -14,19 +14,19 @@ Given the scale (single-user hobby project, 500MB data), full CQRS is rejected d
 
 ---
 
-## ADR 005: Strict Separation of Domain Models and ORM Models
-**Status:** Accepted
+## ADR 005-V2: Unified Models via `rx.Model` (SQLModel)
+**Status:** Accepted (Replaces ADR 005)
 
 ### Context
-SQLAlchemy models are tied to database sessions. Passing SQLAlchemy objects directly into Use Cases or LLM Adapters can cause `LazyInitializationError`s if the async event loop tries to access a relationship after the database session has closed.
+Strict Clean Architecture demands that Domain models know nothing about the Database to prevent `LazyInitializationError`s when async loops access un-hydrated relationships. However, enforcing this strict separation in a Python/Reflex AI app requires writing triple the state-management code (DB Model -> Domain Model -> UI Model).
 
 ### Decision
-We will maintain pure Python/Pydantic models in the `domain/` layer (e.g., `ChatMessage`) and SQLAlchemy models in the `infrastructure/` layer (e.g., `Message`). Repository implementations will be responsible for mapping SQLAlchemy models to pure Domain models before returning them to the Use Cases.
+We will adopt a **Pragmatic Compromise**. We will use Reflex's `rx.Model` (which is SQLModel/Pydantic under the hood) as our unified data structure. A single `Message` class will serve as the Database Table, the Domain Entity passed to Use Cases, and the UI State rendered by React.
 
 ### Consequences
-*   **Positive:** Business logic is completely decoupled from the database lifecycle. No unexpected lazy-loading crashes.
-*   **Positive:** Domain models can be easily serialized to JSON for the API.
-*   **Negative:** Requires writing mapping code (e.g., `return ChatMessage(role=sql_msg.role, content=sql_msg.content)`).
+*   **Positive:** Eliminates the "Boilerplate Tax." Adding a new column (e.g., `is_pinned`) requires changing exactly one line of code.
+*   **Positive:** LLM Agents can easily understand the data flow without getting lost in mapping functions.
+*   **Negative:** The Domain layer is technically "polluted" by the Reflex framework (`rx.Model`).
 
 ## ADR 009: Polymorphic Message Content for Multimodal Edge Cases
 **Status:** Accepted
@@ -38,8 +38,7 @@ Users need to upload images and documents.
 *   Gemini expects an `inline_data` object.
 
 ### Decision
-We will change the Domain `ChatMessage.content` from a simple `str` to a `Union[str, List[ContentPart]]`. We will define polymorphic domain entities: `TextPart`, `ImagePart`, and `DocumentPart`.
-The Adapters will iterate through these parts and construct the provider-specific arrays.
+We will define polymorphic domain entities: `TextPart`, `ImagePart`, and `DocumentPart`. Because we are using `rx.Model` (SQLModel), this polymorphic list will be serialized into a JSON column in the SQLite database, but treated as a List of Pydantic objects in the application layer.
 
 ### Consequences
 *   **Positive:** The frontend and Use Cases only deal with a standard `ImagePart(base64, mime_type)`.

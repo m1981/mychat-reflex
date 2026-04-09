@@ -1,37 +1,31 @@
-## ADR 001: Vertical Slice & Clean Architecture (Screaming Architecture)
+## ADR 001: Vertical Slice Architecture (Screaming Architecture)
 **Status:** Accepted
-**Date:** 2023-10-26
 
 ### Context
 The application needs to support distinct but interconnected features: Chat, RAG (Retrieval-Augmented Generation), and a Knowledge Base (Notes/Highlights). Traditional layered architectures (grouping all controllers together, all models together) make it difficult to locate feature-specific logic and often lead to tight coupling between unrelated domains.
 
 ### Decision
-We will use **Vertical Slice Architecture** at the root level, combined with **Clean Architecture** inside each slice. The directory structure will "scream" the business features (`chat/`, `knowledge_base/`, `rag_engine/`). Inside each feature, code will be strictly divided into `domain/`, `use_cases/`, `infrastructure/`, and `presentation/`.
+We will use **Vertical Slice Architecture**. The directory structure will "scream" the business features (`features/chat/`, `features/knowledge_base/`). Inside each feature, code is divided into `models.py` (Unified Data), `use_cases.py` (Business Logic), `state.py` (Reflex Controller), and `ui.py` (Reflex Components).
 
 ### Consequences
 *   **Positive:** High cohesion. If the "Notes" feature changes, only the `knowledge_base` directory is touched.
-*   **Positive:** Easy to delete or extract features later.
-*   **Negative:** Slight duplication of boilerplate (e.g., each feature might need its own router setup).
 
 ***
 
-## ADR 011: Modular Monolith Deployment Architecture
+## ADR 011: The "Screaming Reflex" Full-Stack Monolith (NEW)
 **Status:** Accepted
-**Date:** 2023-10-26
+**Date:** 2023-10-27
 
 ### Context
-The application needs to handle distinct domains (Chat, Knowledge Base/Notes, RAG Search). We must decide how to deploy and scale these domains. The expected scale is a single-user hobby project with approximately 1,000 chats and 500MB of artifact data. 
+The application needs to handle distinct domains (Chat, Knowledge Base, RAG Search). We must decide how to deploy and scale these domains for a single-user/hobby scale (approx. 1,000 chats and 500MB of data). The previous decoupled FastAPI/Reflex design created a "Dual-Backend Chasm," introducing unnecessary network overhead for this scale.
 
 ### Decision
-We will build and deploy the application as a **Modular Monolith**. 
-*   **Monolith:** The entire application (all features, API endpoints, and background tasks) will run in a single process and be deployed to a single server.
-*   **Modular:** Internally, the code will be strictly divided into isolated modules (Vertical Slices) that do not share database tables directly, communicating only through defined Use Cases.
+We will drop FastAPI entirely and use **Reflex as a Full-Stack Monolith**. The `src/features/` directory (Vertical Slices) will live directly inside the Reflex project. Reflex's `rx.State` will act as the Controller, directly instantiating and calling pure Python Use Cases.
 
 ### Consequences
-*   **Positive:** Drastically simplifies deployment, CI/CD, and infrastructure costs compared to Microservices.
-*   **Positive:** Eliminates network latency between the Chat engine and the Knowledge Base.
-*   **Positive:** Easy to debug and trace errors since everything runs in one memory space.
-*   **Negative:** If the application unexpectedly scales to millions of users, we cannot scale the "Search" feature independently of the "Chat" feature (an acceptable tradeoff for the current scope).
+*   **Positive:** Eliminates the HTTP/Network tax. Development speed is drastically increased.
+*   **Positive:** We retain Vertical Slice Architecture (Screaming Architecture) while utilizing Reflex's native strengths.
+*   **Negative:** The application is now tightly coupled to the Reflex framework. Extracting the backend to a mobile app later will require re-introducing an API layer.
 
 ---
 
@@ -54,4 +48,3 @@ We will adopt **Hexagonal Architecture** (also known as Ports and Adapters) for 
 *   **Negative:** Introduces boilerplate. Developers must write Interfaces and map data between Infrastructure models (SQLAlchemy) and Domain models (Pydantic/Dataclasses).
 
 ---
-
