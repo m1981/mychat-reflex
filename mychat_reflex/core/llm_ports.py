@@ -118,13 +118,18 @@ class AnthropicAdapter(ILLMService):
         """Stream response from Anthropic Claude."""
         config = config or LLMConfig()
 
-        logger.info(
-            f"[AnthropicAdapter] Generating response for prompt: {prompt[:50]}..."
-        )
-        logger.debug(
-            f"[AnthropicAdapter] Config: temp={config.temperature}, "
-            f"reasoning={config.enable_reasoning}"
-        )
+        logger.info("=" * 80)
+        logger.info("[AnthropicAdapter] 🚀 STARTING NEW API REQUEST")
+        logger.info("=" * 80)
+        logger.info(f"[AnthropicAdapter] Model: {self.model}")
+        logger.info(f"[AnthropicAdapter] Temperature: {config.temperature}")
+        logger.info(f"[AnthropicAdapter] Reasoning enabled: {config.enable_reasoning}")
+        logger.info(f"[AnthropicAdapter] Prompt length: {len(prompt)} characters")
+        logger.info("-" * 80)
+        logger.info("[AnthropicAdapter] FULL PROMPT:")
+        logger.info("-" * 80)
+        logger.info(prompt)
+        logger.info("-" * 80)
 
         # Build API request
         messages = [{"role": "user", "content": prompt}]
@@ -142,21 +147,52 @@ class AnthropicAdapter(ILLMService):
                 "type": "enabled",
                 "budget_tokens": config.reasoning_budget or 2000,
             }
-            logger.debug("[AnthropicAdapter] Extended thinking enabled")
+            logger.info("[AnthropicAdapter] ✅ Extended thinking enabled")
+            logger.info(
+                f"[AnthropicAdapter] Thinking budget: {kwargs['thinking']['budget_tokens']} tokens"
+            )
+
+        # Log the complete API request payload
+        logger.info("=" * 80)
+        logger.info("[AnthropicAdapter] 📤 ANTHROPIC API REQUEST PAYLOAD:")
+        logger.info("=" * 80)
+        import json
+
+        logger.info(json.dumps(kwargs, indent=2, default=str))
+        logger.info("=" * 80)
 
         try:
             chunk_count = 0
+            total_chars = 0
             async with self.client.messages.stream(**kwargs) as stream:
                 async for text in stream.text_stream:
                     chunk_count += 1
+                    total_chars += len(text)
                     if chunk_count == 1:
-                        logger.info("[AnthropicAdapter] First chunk received")
+                        logger.info("[AnthropicAdapter] ✅ First chunk received!")
+                        logger.info(
+                            f"[AnthropicAdapter] First chunk content: {repr(text[:100])}"
+                        )
+                    if chunk_count % 10 == 0:
+                        logger.debug(
+                            f"[AnthropicAdapter] Chunk #{chunk_count}, total chars: {total_chars}"
+                        )
                     yield text
 
-            logger.info(f"[AnthropicAdapter] Stream completed. Chunks: {chunk_count}")
+            logger.info("=" * 80)
+            logger.info("[AnthropicAdapter] ✅ STREAM COMPLETED SUCCESSFULLY")
+            logger.info("=" * 80)
+            logger.info(f"[AnthropicAdapter] Total chunks received: {chunk_count}")
+            logger.info(f"[AnthropicAdapter] Total characters: {total_chars}")
+            logger.info("=" * 80)
 
         except Exception as e:
-            logger.error(f"[AnthropicAdapter] Error: {type(e).__name__}: {str(e)}")
+            logger.error("=" * 80)
+            logger.error("[AnthropicAdapter] ❌ ERROR OCCURRED")
+            logger.error("=" * 80)
+            logger.error(f"[AnthropicAdapter] Error type: {type(e).__name__}")
+            logger.error(f"[AnthropicAdapter] Error message: {str(e)}")
+            logger.error("=" * 80)
             raise
 
 

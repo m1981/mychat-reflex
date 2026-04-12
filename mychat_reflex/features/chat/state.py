@@ -231,12 +231,28 @@ class ChatState(rx.State):
     @rx.event(background=True)
     async def handle_send_message(self):
         """Handle sending a message and streaming AI response."""
+        logger.info("=" * 80)
+        logger.info("[ChatState] 🎯 HANDLE_SEND_MESSAGE TRIGGERED")
+        logger.info("=" * 80)
+
         async with self:
             prompt = self.input_text
+            conv_id = self.current_conversation_id
+            logger.info(f"[ChatState] Conversation ID: {conv_id}")
+            logger.info(f"[ChatState] User prompt: {prompt}")
+            logger.info(f"[ChatState] Current messages count: {len(self.messages)}")
+            logger.info(f"[ChatState] Is generating: {self.is_generating}")
+
             if not prompt.strip() or self.is_generating:
+                logger.warning(
+                    "[ChatState] ⚠️ Aborting: Empty prompt or already generating"
+                )
                 return
 
         # Step 1: Save user message
+        logger.info("-" * 80)
+        logger.info("[ChatState] STEP 1: Saving user message")
+        logger.info("-" * 80)
         user_msg_id = str(uuid4())
         async with self:
             self.input_text = ""
@@ -255,11 +271,18 @@ class ChatState(rx.State):
             with rx.session() as session:
                 session.add(Message(**user_msg.model_dump()))
                 session.commit()
+                logger.info(f"[ChatState] ✅ User message saved to DB: {user_msg_id}")
 
             self.messages.append(user_msg)
             self.messages = self.messages
+            logger.info(
+                f"[ChatState] ✅ User message added to UI state (total: {len(self.messages)})"
+            )
 
         # Step 2: Create AI message placeholder
+        logger.info("-" * 80)
+        logger.info("[ChatState] STEP 2: Creating AI message placeholder")
+        logger.info("-" * 80)
         ai_msg_id = str(uuid4())
         async with self:
             ai_msg = Message(
@@ -270,27 +293,52 @@ class ChatState(rx.State):
             )
             self.messages.append(ai_msg)
             self.messages = self.messages
+            logger.info(f"[ChatState] ✅ AI placeholder created: {ai_msg_id}")
 
         # Step 3: Stream LLM response
-        use_case = SendMessageUseCase(self._get_llm_service())
+        logger.info("-" * 80)
+        logger.info("[ChatState] STEP 3: Streaming LLM response")
+        logger.info("-" * 80)
+        logger.info("[ChatState] Creating LLM service...")
+        llm_service = self._get_llm_service()
+        logger.info(f"[ChatState] LLM service created: {type(llm_service).__name__}")
+
+        use_case = SendMessageUseCase(llm_service)
         full_response = ""
 
         # Pass history to Use Case (excluding the new user msg and empty AI placeholder)
         chat_history = self.messages[:-2]
+        logger.info(
+            f"[ChatState] Passing {len(chat_history)} history messages to use case"
+        )
 
+        chunk_count = 0
         async for chunk in use_case.execute(
             conversation_id=self.current_conversation_id,
             user_message=prompt,
             history=chat_history,
             config=LLMConfig(temperature=0.7),
         ):
+            chunk_count += 1
             full_response += chunk
             async with self:
                 # O(1) update: We know the AI message is the last one in the list
                 self.messages[-1].content = full_response
                 self.messages = self.messages
 
+            if chunk_count == 1:
+                logger.info("[ChatState] ✅ First chunk received, UI updating...")
+            if chunk_count % 20 == 0:
+                logger.debug(
+                    f"[ChatState] Chunk #{chunk_count}, response length: {len(full_response)}"
+                )
+
+        logger.info(f"[ChatState] ✅ Streaming complete. Total chunks: {chunk_count}")
+
         # Step 4: Save final AI message
+        logger.info("-" * 80)
+        logger.info("[ChatState] STEP 4: Saving final AI message to database")
+        logger.info("-" * 80)
         async with self:
             with rx.session() as session:
                 # Save a COPY of the final AI message to the database
@@ -303,6 +351,10 @@ class ChatState(rx.State):
                     content=full_response,
                 )
                 session.add(ai_msg_final)
+                logger.info(f"[ChatState] ✅ AI message saved to DB: {ai_msg_id}")
+                logger.info(
+                    f"[ChatState] Response length: {len(full_response)} characters"
+                )
 
                 # Update conversation timestamp
                 conversation = (
@@ -312,11 +364,17 @@ class ChatState(rx.State):
                 )
                 if conversation:
                     conversation.updated_at = datetime.now(timezone.utc)
+                    logger.info("[ChatState] ✅ Conversation timestamp updated")
 
                 session.commit()
 
             self.is_generating = False
             self.messages = self.messages
+            logger.info("[ChatState] ✅ is_generating set to False")
+
+        logger.info("=" * 80)
+        logger.info("[ChatState] ✅ HANDLE_SEND_MESSAGE COMPLETED SUCCESSFULLY")
+        logger.info("=" * 80)
 
     # ========================================================================
     # PLACEHOLDER METHODS (Future Implementation)

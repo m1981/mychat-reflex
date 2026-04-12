@@ -50,18 +50,32 @@ class SendMessageUseCase:
             ```
         """
         config = config or LLMConfig(temperature=0.7)
-        logger.info(
-            f"[SendMessageUseCase] Executing for conversation: {conversation_id}"
-        )
+
+        logger.info("=" * 80)
+        logger.info("[SendMessageUseCase] 📨 EXECUTING USE CASE")
+        logger.info("=" * 80)
+        logger.info(f"[SendMessageUseCase] Conversation ID: {conversation_id}")
+        logger.info(f"[SendMessageUseCase] User message: {user_message}")
+        logger.info(f"[SendMessageUseCase] History length: {len(history)} messages")
+        logger.info(f"[SendMessageUseCase] Config: {config}")
+        logger.info("-" * 80)
 
         # ✅ CRITICAL FIX: Format the history so the AI has memory
         transcript = ""
-        for msg in history:
+        for i, msg in enumerate(history):
             speaker = "User" if msg.is_user else "Assistant"
             transcript += f"{speaker}: {msg.content}\n\n"
+            logger.debug(
+                f"[SendMessageUseCase] History[{i}] ({speaker}): {msg.content[:50]}..."
+            )
 
         # Append the current message
         transcript += f"User: {user_message}\n\nAssistant:"
+
+        logger.info(
+            f"[SendMessageUseCase] Built transcript with {len(transcript)} characters"
+        )
+        logger.info("[SendMessageUseCase] 🔄 Calling LLM service...")
 
         # Stream from LLM service using the full transcript
         chunk_count = 0
@@ -71,10 +85,16 @@ class SendMessageUseCase:
         ):
             chunk_count += 1
             if chunk_count == 1:
-                logger.info("[SendMessageUseCase] First chunk received from LLM")
+                logger.info("[SendMessageUseCase] ✅ First chunk received from LLM")
+            if chunk_count % 10 == 0:
+                logger.debug(f"[SendMessageUseCase] Received chunk #{chunk_count}")
             yield chunk
 
-        logger.info(f"[SendMessageUseCase] Completed. Total chunks: {chunk_count}")
+        logger.info("=" * 80)
+        logger.info("[SendMessageUseCase] ✅ USE CASE COMPLETED")
+        logger.info("=" * 80)
+        logger.info(f"[SendMessageUseCase] Total chunks: {chunk_count}")
+        logger.info("=" * 80)
 
 
 class LoadHistoryUseCase:
