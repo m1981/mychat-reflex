@@ -6,11 +6,7 @@ Contains the right sidebar notes panel.
 
 import reflex as rx
 
-# FIXME (Architecture Debt):
-# Rule #4 states we should not import state from other features.
-# For MVP Phase 2, we are importing ChatState because all state is currently centralized there.
-# In Phase 4, we must extract KnowledgeBaseState and update these bindings.
-from mychat_reflex.features.chat.state import ChatState
+from .state import KnowledgeBaseState
 
 
 def notes_header() -> rx.Component:
@@ -28,18 +24,30 @@ def notes_content() -> rx.Component:
     """Notes content area."""
     return rx.box(
         rx.cond(
-            ChatState.notes_content == "",
+            KnowledgeBaseState.notes_content == "",
             rx.text(
                 "Empty notes...",
                 class_name="text-gray-400 text-sm italic",
             ),
             rx.el.textarea(
-                value=ChatState.notes_content,
-                # Note: on_change handler is missing in original code,
-                # will need to be added to state later if notes are editable
+                value=KnowledgeBaseState.notes_content,
+                on_change=KnowledgeBaseState.set_notes_content,
                 placeholder="Add your notes here...",
                 class_name="w-full h-full resize-none outline-none text-gray-700 text-sm",
             ),
         ),
         class_name="flex-1 p-4 overflow-y-auto",
+    )
+
+
+# ✅ CRITICAL FIX: This function was missing!
+def notes_panel() -> rx.Component:
+    """Complete right sidebar notes panel."""
+    return rx.el.aside(
+        rx.box(
+            notes_header(),
+            notes_content(),
+            class_name="border border-gray-300 rounded-2xl h-full bg-white flex flex-col overflow-hidden shadow-sm",
+        ),
+        class_name="w-80 flex-shrink-0 border-l border-gray-300 hidden lg:flex flex-col p-4 bg-gray-50/50",
     )

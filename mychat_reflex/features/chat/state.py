@@ -132,6 +132,7 @@ class ChatState(rx.State):
                 .order_by(Message.created_at)
                 .all()
             )
+            session.expunge_all()  # ✅ CRITICAL FIX 1: Detach messages
             self.messages = messages
             logger.info(f"[ChatState] Loaded {len(messages)} messages")
 
@@ -139,6 +140,7 @@ class ChatState(rx.State):
         with rx.session() as session:
             folders = session.query(ChatFolder).all()
             chats = session.query(Conversation).all()
+            session.expunge_all()  # ✅ CRITICAL FIX 1: Detach folders and chats
             self.folders = folders
             self.chats = chats
             logger.info(
@@ -181,6 +183,7 @@ class ChatState(rx.State):
                 .order_by(Message.created_at)
                 .all()
             )
+            session.expunge_all()  # ✅ CRITICAL FIX 1: Detach messages
             self.messages = messages
             logger.info(f"[ChatState] Loaded {len(messages)} messages for {chat_id}")
 
@@ -314,7 +317,7 @@ class ChatState(rx.State):
         async for chunk in use_case.execute(
             conversation_id=self.current_conversation_id,
             user_message=prompt,
-            history=chat_history,  # ✅ CRITICAL FIX: Pass the history!
+            history=chat_history,
             config=LLMConfig(temperature=0.7),
         ):
             chunk_count += 1
@@ -322,12 +325,10 @@ class ChatState(rx.State):
 
             # Update UI with streaming text
             async with self:
-                # Find the AI message and update its content
-                for i, msg in enumerate(self.messages):
-                    if msg.id == ai_msg_id:
-                        self.messages[i].content = full_response
-                        self.messages = self.messages  # CRITICAL: Trigger reactivity!
-                        break
+                # ✅ CRITICAL FIX 2: O(1) update instead of O(N) loop!
+                # We know the AI message is the last one in the list.
+                self.messages[-1].content = full_response
+                self.messages = self.messages
 
         logger.info(f"[ChatState] LLM stream complete. Chunks: {chunk_count}")
 

@@ -5,6 +5,7 @@ import reflex as rx
 # ARCHITECT FIX: Importing from the new Vertical Slices!
 from mychat_reflex.features.workspace.ui import sidebar
 from mychat_reflex.features.chat.ui import chat_area
+from mychat_reflex.features.knowledge_base.ui import notes_panel
 
 
 def main_page() -> rx.Component:
@@ -17,5 +18,6 @@ def main_page() -> rx.Component:
     return rx.box(
         sidebar(),
         chat_area(),
+        notes_panel(),
         class_name="bg-white text-gray-800 font-sans antialiased h-screen w-full overflow-hidden flex",
     )
