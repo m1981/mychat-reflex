@@ -12,8 +12,7 @@ CRITICAL REFLEX RULES APPLIED:
 - async with self: for all state mutations
 - self.messages = self.messages to trigger reactivity
 - Open rx.session(), write, close immediately (NEVER hold during LLM streaming)
-
-Migrated from mychat_reflex/state/chat_state.py (Phase 4, Task 4.1)
+- Pydantic Cloning: .model_dump() used to prevent DetachedInstanceError
 """
 
 import logging
@@ -83,11 +82,16 @@ class ChatState(rx.State):
     _llm_service: Optional[AnthropicAdapter] = None
 
     def _get_llm_service(self) -> ILLMService:
-        """Get or create the LLM service instance."""
+        """
+        Get or create the LLM service instance (lazy initialization).
+
+        ARCHITECT NOTE: We cache this on `self._llm_service` for reuse.
+        The underscore prefix prevents Reflex from serializing it to the frontend.
+        """
         if self._llm_service is None:
             self._llm_service = AnthropicAdapter(
                 api_key=os.getenv("ANTHROPIC_API_KEY", ""),
-                model="claude-sonnet-4-20250514",
+                model="claude-sonnet-4-5",
             )
         return self._llm_service
 
@@ -116,55 +120,39 @@ class ChatState(rx.State):
     # ========================================================================
 
     def on_load(self):
-        """
-        Load data when page loads.
-
-        This runs on every page load/refresh.
-        Loads conversation history and sidebar data.
-        """
+        """Load data when page loads."""
         logger.info("[ChatState] on_load triggered")
 
         # Load messages for current conversation
         with rx.session() as session:
-            messages = (
+            db_messages = (
                 session.query(Message)
                 .filter(Message.conversation_id == self.current_conversation_id)
                 .order_by(Message.created_at)
                 .all()
             )
-            session.expunge_all()  # ✅ CRITICAL FIX 1: Detach messages
-            self.messages = messages
-            logger.info(f"[ChatState] Loaded {len(messages)} messages")
+            # ✅ CRITICAL FIX: Clone into pure in-memory objects
+            self.messages = [Message(**m.model_dump()) for m in db_messages]
 
-        # Load folders and conversations
         with rx.session() as session:
-            folders = session.query(ChatFolder).all()
-            chats = session.query(Conversation).all()
-            session.expunge_all()  # ✅ CRITICAL FIX 1: Detach folders and chats
-            self.folders = folders
-            self.chats = chats
-            logger.info(
-                f"[ChatState] Loaded {len(folders)} folders, {len(chats)} chats"
-            )
+            db_folders = session.query(ChatFolder).all()
+            db_chats = session.query(Conversation).all()
+            # ✅ CRITICAL FIX: Clone into pure in-memory objects
+            self.folders = [ChatFolder(**f.model_dump()) for f in db_folders]
+            self.chats = [Conversation(**c.model_dump()) for c in db_chats]
 
     # ========================================================================
     # UI EVENT HANDLERS (Synchronous)
     # ========================================================================
 
     def set_input_text(self, value: str):
-        """Update the input text."""
         self.input_text = value
 
     def set_sidebar_search(self, value: str):
-        """Update sidebar search."""
         self.sidebar_search = value
 
     def select_chat(self, chat_id: str):
-        """
-        Select a different conversation.
-
-        This loads the conversation's messages from the database.
-        """
+        """Select a different conversation."""
         logger.info(f"[ChatState] Selecting chat: {chat_id}")
 
         self.current_conversation_id = chat_id
@@ -177,32 +165,31 @@ class ChatState(rx.State):
 
         # Load messages
         with rx.session() as session:
-            messages = (
+            db_messages = (
                 session.query(Message)
                 .filter(Message.conversation_id == chat_id)
                 .order_by(Message.created_at)
                 .all()
             )
-            session.expunge_all()  # ✅ CRITICAL FIX 1: Detach messages
-            self.messages = messages
-            logger.info(f"[ChatState] Loaded {len(messages)} messages for {chat_id}")
+            # ✅ CRITICAL FIX: Clone into pure in-memory objects
+            self.messages = [Message(**m.model_dump()) for m in db_messages]
 
     def create_new_chat(self):
         """Create a new conversation."""
         logger.info("[ChatState] Creating new chat")
-
         new_id = str(uuid4())
+
+        # 1. Create a pure in-memory object for the UI
         new_chat = Conversation(id=new_id, title="New Chat")
 
-        # Save to database
+        # 2. Save a COPY to the database
         with rx.session() as session:
-            session.add(new_chat)
+            session.add(Conversation(**new_chat.model_dump()))
             session.commit()
-            logger.info(f"[ChatState] Created conversation: {new_id}")
 
-        # Update UI state
+        # 3. Append the pure object to the state
         self.chats.append(new_chat)
-        self.chats = self.chats  # Trigger reactivity
+        self.chats = self.chats
         self.current_conversation_id = new_id
         self.current_chat_title = "New Chat"
         self.messages = []
@@ -210,33 +197,30 @@ class ChatState(rx.State):
     def create_new_folder(self):
         """Create a new folder."""
         logger.info("[ChatState] Creating new folder")
-
         new_id = str(uuid4())
+
+        # 1. Create a pure in-memory object for the UI
         new_folder = ChatFolder(id=new_id, name="New Folder")
 
-        # Save to database
+        # 2. Save a COPY to the database
         with rx.session() as session:
-            session.add(new_folder)
+            session.add(ChatFolder(**new_folder.model_dump()))
             session.commit()
-            logger.info(f"[ChatState] Created folder: {new_id}")
 
-        # Update UI state
+        # 3. Append the pure object to the state
         self.folders.append(new_folder)
-        self.folders = self.folders  # Trigger reactivity
+        self.folders = self.folders
 
     def delete_message(self, message_id: str):
         """Delete a message."""
         logger.info(f"[ChatState] Deleting message: {message_id}")
 
-        # Delete from database
         with rx.session() as session:
             message = session.query(Message).filter(Message.id == message_id).first()
             if message:
                 session.delete(message)
                 session.commit()
-                logger.info(f"[ChatState] Deleted message: {message_id}")
 
-        # Update UI state
         self.messages = [m for m in self.messages if m.id != message_id]
 
     # ========================================================================
@@ -245,35 +229,19 @@ class ChatState(rx.State):
 
     @rx.event(background=True)
     async def handle_send_message(self):
-        """
-        Handle sending a message and streaming AI response.
-
-        CRITICAL: This follows Reflex's async rules!
-        1. Use @rx.event(background=True) decorator
-        2. Use 'async with self:' to safely update state
-        3. Do NOT hold rx.session() during LLM streaming
-        4. Use self.messages = self.messages to trigger reactivity
-
-        Flow:
-        1. Save user message (open session, write, close)
-        2. Stream LLM response (NO session open!)
-        3. Save AI message (open NEW session, write, close)
-        """
-        # Get prompt before clearing input
+        """Handle sending a message and streaming AI response."""
         async with self:
             prompt = self.input_text
             if not prompt.strip() or self.is_generating:
-                logger.warning("[ChatState] Empty prompt or already generating")
                 return
 
-            logger.info(f"[ChatState] handle_send_message: {prompt[:50]}...")
-
-        # Step 1: Save user message (open session, write, close)
+        # Step 1: Save user message
         user_msg_id = str(uuid4())
         async with self:
-            self.input_text = ""  # Clear input immediately
+            self.input_text = ""
             self.is_generating = True
 
+            # Pure in-memory object
             user_msg = Message(
                 id=user_msg_id,
                 conversation_id=self.current_conversation_id,
@@ -282,15 +250,13 @@ class ChatState(rx.State):
                 avatar_url="https://i.pravatar.cc/150?img=11",
             )
 
-            # Save to database
+            # Save a COPY to the database
             with rx.session() as session:
-                session.add(user_msg)
+                session.add(Message(**user_msg.model_dump()))
                 session.commit()
-                logger.info(f"[ChatState] Saved user message: {user_msg_id}")
 
-            # Update UI
             self.messages.append(user_msg)
-            self.messages = self.messages  # CRITICAL: Trigger reactivity!
+            self.messages = self.messages
 
         # Step 2: Create AI message placeholder
         ai_msg_id = str(uuid4())
@@ -299,19 +265,16 @@ class ChatState(rx.State):
                 id=ai_msg_id,
                 conversation_id=self.current_conversation_id,
                 role="assistant",
-                content="",  # Empty placeholder
+                content="",
             )
-
-            # Add to UI immediately (optimistic update)
             self.messages.append(ai_msg)
-            self.messages = self.messages  # CRITICAL: Trigger reactivity!
+            self.messages = self.messages
 
-        # Step 3: Stream LLM response (NO database session open!)
+        # Step 3: Stream LLM response
         use_case = SendMessageUseCase(self._get_llm_service())
         full_response = ""
 
-        logger.info("[ChatState] Starting LLM stream...")
-        chunk_count = 0
+        # Pass history to Use Case (excluding the new user msg and empty AI placeholder)
         chat_history = self.messages[:-2]
 
         async for chunk in use_case.execute(
@@ -320,28 +283,18 @@ class ChatState(rx.State):
             history=chat_history,
             config=LLMConfig(temperature=0.7),
         ):
-            chunk_count += 1
             full_response += chunk
-
-            # Update UI with streaming text
             async with self:
-                # ✅ CRITICAL FIX 2: O(1) update instead of O(N) loop!
-                # We know the AI message is the last one in the list.
+                # O(1) update: We know the AI message is the last one in the list
                 self.messages[-1].content = full_response
                 self.messages = self.messages
 
-        logger.info(f"[ChatState] LLM stream complete. Chunks: {chunk_count}")
-
-        # Step 4: Save final AI message (open NEW session, write, close)
+        # Step 4: Save final AI message
         async with self:
-            # Update the AI message with final content
-            for i, msg in enumerate(self.messages):
-                if msg.id == ai_msg_id:
-                    self.messages[i].content = full_response
-                    break
-
-            # Save to database
             with rx.session() as session:
+                # Save a COPY of the final AI message to the database
+                # CRITICAL FIX: Don't rely on .model_dump() - Reflex serialization breaks it
+                # Just reconstruct from the variables we already have
                 ai_msg_final = Message(
                     id=ai_msg_id,
                     conversation_id=self.current_conversation_id,
@@ -349,11 +302,8 @@ class ChatState(rx.State):
                     content=full_response,
                 )
                 session.add(ai_msg_final)
-                session.commit()
-                logger.info(f"[ChatState] Saved AI message: {ai_msg_id}")
 
-            # Update conversation timestamp
-            with rx.session() as session:
+                # Update conversation timestamp
                 conversation = (
                     session.query(Conversation)
                     .filter(Conversation.id == self.current_conversation_id)
@@ -361,22 +311,18 @@ class ChatState(rx.State):
                 )
                 if conversation:
                     conversation.updated_at = datetime.now(timezone.utc)
-                    session.commit()
+
+                session.commit()
 
             self.is_generating = False
-            self.messages = self.messages  # Final reactivity trigger
-            logger.info("[ChatState] handle_send_message complete")
+            self.messages = self.messages
 
     # ========================================================================
     # PLACEHOLDER METHODS (Future Implementation)
     # ========================================================================
 
     def copy_message(self, message_id: str):
-        """Copy message to clipboard (placeholder)."""
-        logger.info(f"[ChatState] copy_message: {message_id} (not implemented)")
         pass
 
     def regenerate_message(self, message_id: str):
-        """Regenerate an AI response (placeholder)."""
-        logger.info(f"[ChatState] regenerate_message: {message_id} (not implemented)")
         pass
