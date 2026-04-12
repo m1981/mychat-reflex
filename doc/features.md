@@ -6,9 +6,6 @@ F4 - Each chat should be
 
 F5 - I need to see current cost for a conversation based on the input and output token count. (IF model does not provide tokens count in API we will use fast tokenizer regardless of provider. We don't have to be token perfect)
 
-F6 -
-
-
 
 # Feature Specification
 
