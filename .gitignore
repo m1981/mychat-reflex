@@ -5,3 +5,6 @@ assets/external/
 .states
 *.db
 .env
+.idea
+.intent
+.coverage
