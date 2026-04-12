@@ -2,10 +2,11 @@
 Core infrastructure module.
 
 This module contains shared infrastructure components:
-- database.py: Reflex database configuration and base models
+- database.py: Reflex database configuration and utilities
 - llm_ports.py: LLM service interfaces and adapters (ILLMService, AnthropicAdapter, etc.)
 """
 
+from .database import DatabaseConfig
 from .llm_ports import (
     Role,
     LLMConfig,
@@ -15,6 +16,9 @@ from .llm_ports import (
 )
 
 __all__ = [
+    # Database
+    "DatabaseConfig",
+    # LLM
     "Role",
     "LLMConfig",
     "ILLMService",
