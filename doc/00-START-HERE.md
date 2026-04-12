@@ -95,10 +95,11 @@ The codebase strictly follows **Vertical Slice (Screaming) Architecture**. Do no
 1. **Vertical Slice Isolation**: Each feature in `features/` is self-contained. Do NOT create horizontal layers at root.
 2. **Screaming Architecture**: Folder names SCREAM their domain purpose (`chat/`, `workspace/`), not technical role.
 3. **Unified Models**: `rx.Model` classes in `models.py` are DB tables, domain entities, AND UI state.
-4. **No Cross-Feature Imports**: `features/chat/` should NOT import from `features/workspace/` (use shared `core/` instead).
+4. **Controlled Cross-Feature Imports**: Features may import `models.py` from other features to establish Foreign Keys (Shared Data Layer). However, a feature may NEVER import `state.py` or `ui.py` from another feature.
 5. **Use Cases Stay Pure**: Business logic in `use_cases.py` depends on interfaces (`ILLMService`), not concrete adapters.
 6. **State as Controller**: `state.py` files contain `rx.State` classes that orchestrate use cases and handle `rx.session()`.
 
+7. The Database Session Rule**: `rx.session()` MUST be short-lived. Never hold a database session open while `await`-ing an LLM stream. Open session -> Save User Message -> Close Session -> Stream LLM -> Open Session -> Save AI Message -> Close Session.
 ## 4. High-Level System Context
 
 ### Technology Stack
