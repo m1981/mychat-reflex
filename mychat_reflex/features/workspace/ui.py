@@ -1,7 +1,16 @@
-"""Left sidebar component with navigation, folders, and settings."""
+"""
+Workspace Feature UI Components.
+
+Contains the left sidebar, folder navigation, and chat selection.
+"""
 
 import reflex as rx
-from ..state.chat_state import ChatState
+
+# FIXME (Architecture Debt):
+# Rule #4 states we should not import state from other features.
+# For MVP Phase 2, we are importing ChatState because all state is currently centralized there.
+# In Phase 4, we must extract WorkspaceState and update these bindings.
+from mychat_reflex.features.chat.state import ChatState
 
 
 def sidebar_header() -> rx.Component:

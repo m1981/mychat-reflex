@@ -16,11 +16,6 @@ from mychat_reflex.features.chat.models import Message, Conversation
 from mychat_reflex.features.chat.state import ChatState
 
 
-# ============================================================================
-# TEST DOUBLES
-# ============================================================================
-
-
 class FakeLLM(ILLMService):
     """Fake LLM for testing - returns predictable responses."""
 

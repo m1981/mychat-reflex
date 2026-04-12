@@ -28,6 +28,7 @@ class SendMessageUseCase:
         self,
         conversation_id: str,
         user_message: str,
+        history: List[Message],  # ✅ CRITICAL FIX: Added history parameter
         config: Optional[LLMConfig] = None,
     ) -> AsyncGenerator[str, None]:
         """
@@ -52,12 +53,20 @@ class SendMessageUseCase:
         logger.info(
             f"[SendMessageUseCase] Executing for conversation: {conversation_id}"
         )
-        logger.debug(f"[SendMessageUseCase] User message: {user_message[:50]}...")
 
-        # Stream from LLM service
+        # ✅ CRITICAL FIX: Format the history so the AI has memory
+        transcript = ""
+        for msg in history:
+            speaker = "User" if msg.is_user else "Assistant"
+            transcript += f"{speaker}: {msg.content}\n\n"
+
+        # Append the current message
+        transcript += f"User: {user_message}\n\nAssistant:"
+
+        # Stream from LLM service using the full transcript
         chunk_count = 0
         async for chunk in self.llm.generate_stream(
-            prompt=user_message,
+            prompt=transcript,
             config=config,
         ):
             chunk_count += 1

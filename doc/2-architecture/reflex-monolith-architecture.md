@@ -701,9 +701,10 @@ async def test_send_message_streams_from_llm():
 ```python
 import pytest
 import reflex as rx
-from mychat_reflex.features.chat.state import ChatState
+from mychat_reflex.features.chat.chat_state import ChatState
 from mychat_reflex.features.chat.models import Message
 from tests.fakes import FakeLLMService
+
 
 @pytest.mark.asyncio
 async def test_send_message_integration():

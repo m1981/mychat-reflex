@@ -6,7 +6,7 @@ Built with Reflex Framework (2026)
 import reflex as rx
 
 from .pages.main import main_page
-from .state.chat_state import ChatState  # noqa: F401 - imported for state registration
+from .features.chat.state import ChatState  # noqa: F401 - imported for state registration
 
 
 def index() -> rx.Component:

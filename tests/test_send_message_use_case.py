@@ -1,14 +1,11 @@
 """
 Unit tests for SendMessageUseCase.
-
-Following TDD principles - test written BEFORE implementation.
-Uses FakeLLM to avoid external API dependencies.
 """
 
 import pytest
 from typing import AsyncGenerator, Optional
 from mychat_reflex.core.llm_ports import ILLMService, LLMConfig
-
+from mychat_reflex.features.chat.models import Message
 
 # ============================================================================
 # TEST DOUBLES (Fake LLM)
@@ -29,12 +26,10 @@ class FakeLLM(ILLMService):
         prompt: str,
         config: Optional[LLMConfig] = None,
     ) -> AsyncGenerator[str, None]:
-        """Stream fake response word by word."""
         self.last_prompt = prompt
         self.last_config = config
         self.call_count += 1
 
-        # Simulate streaming by yielding words
         words = self.response.split()
         for word in words:
             yield word + " "
@@ -48,40 +43,59 @@ class FakeLLM(ILLMService):
 @pytest.mark.asyncio
 async def test_send_message_streams_llm_response():
     """Test that SendMessageUseCase streams LLM response chunks."""
-    # Arrange
     from mychat_reflex.features.chat.use_cases import SendMessageUseCase
 
     fake_llm = FakeLLM(response="Hello world from AI")
     use_case = SendMessageUseCase(llm_service=fake_llm)
 
-    # Act
     chunks = []
+    # ARCHITECT FIX: Added empty history list
     async for chunk in use_case.execute(
-        conversation_id="test-conv-123", user_message="Test prompt"
+        conversation_id="test-conv-123", user_message="Test prompt", history=[]
     ):
         chunks.append(chunk)
 
-    # Assert
-    assert len(chunks) == 4  # "Hello ", "world ", "from ", "AI "
+    assert len(chunks) == 4
     assert "".join(chunks).strip() == "Hello world from AI"
     assert fake_llm.call_count == 1
-    assert fake_llm.last_prompt == "Test prompt"
+    # ARCHITECT FIX: Expect the formatted transcript, not just the raw prompt
+    assert fake_llm.last_prompt == "User: Test prompt\n\nAssistant:"
 
 
 @pytest.mark.asyncio
-async def test_send_message_passes_config_to_llm():
-    """Test that LLMConfig is passed to the LLM service."""
-    # Arrange
+async def test_send_message_formats_history_correctly():
+    """Test that previous messages are included in the prompt transcript."""
     from mychat_reflex.features.chat.use_cases import SendMessageUseCase
 
     fake_llm = FakeLLM()
     use_case = SendMessageUseCase(llm_service=fake_llm)
 
-    # Act
-    async for _ in use_case.execute(conversation_id="test-conv", user_message="Test"):
+    # Create fake history
+    history = [
+        Message(id="1", conversation_id="c1", role="user", content="Hi"),
+        Message(id="2", conversation_id="c1", role="assistant", content="Hello"),
+    ]
+
+    async for _ in use_case.execute("c1", "How are you?", history=history):
         pass
 
-    # Assert
+    expected_transcript = (
+        "User: Hi\n\nAssistant: Hello\n\nUser: How are you?\n\nAssistant:"
+    )
+    assert fake_llm.last_prompt == expected_transcript
+
+
+@pytest.mark.asyncio
+async def test_send_message_passes_config_to_llm():
+    """Test that LLMConfig is passed to the LLM service."""
+    from mychat_reflex.features.chat.use_cases import SendMessageUseCase
+
+    fake_llm = FakeLLM()
+    use_case = SendMessageUseCase(llm_service=fake_llm)
+
+    async for _ in use_case.execute("test-conv", "Test", history=[]):
+        pass
+
     assert fake_llm.last_config is not None
     assert fake_llm.last_config.temperature == 0.7
 
@@ -98,7 +112,9 @@ async def test_send_message_handles_empty_response():
     # Act
     chunks = []
     async for chunk in use_case.execute(
-        conversation_id="test-conv", user_message="Test"
+        conversation_id="test-conv",
+        user_message="Test",
+        history=[],  # ✅ CRITICAL FIX: Added empty history
     ):
         chunks.append(chunk)
 
@@ -119,7 +135,9 @@ async def test_send_message_preserves_clean_architecture():
     # Act
     result = []
     async for chunk in use_case.execute(
-        conversation_id="test", user_message="Test clean architecture"
+        conversation_id="test",
+        user_message="Test clean architecture",
+        history=[],  # ✅ CRITICAL FIX: Added empty history
     ):
         result.append(chunk)
 

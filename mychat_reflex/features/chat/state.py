@@ -309,10 +309,12 @@ class ChatState(rx.State):
 
         logger.info("[ChatState] Starting LLM stream...")
         chunk_count = 0
+        chat_history = self.messages[:-2]
 
         async for chunk in use_case.execute(
             conversation_id=self.current_conversation_id,
             user_message=prompt,
+            history=chat_history,  # ✅ CRITICAL FIX: Pass the history!
             config=LLMConfig(temperature=0.7),
         ):
             chunk_count += 1
