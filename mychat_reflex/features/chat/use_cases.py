@@ -1,16 +1,5 @@
 """
 Chat Use Cases - Pure Business Logic.
-
-This module contains use cases for the chat feature:
-- SendMessageUseCase: Orchestrates sending a message and streaming AI response
-- LoadHistoryUseCase: Loads conversation history from database
-
-IMPORTANT: Use cases are PURE business logic.
-- They depend on ILLMService interface (Clean Architecture)
-- They do NOT handle rx.session() - that's the State's responsibility
-- They do NOT handle UI updates - that's the State's responsibility
-
-Migrated from src/features/chat/use_cases/ (Phase 3, Task 3.1)
 """
 
 import logging
@@ -29,25 +18,9 @@ logger = logging.getLogger(__name__)
 
 
 class SendMessageUseCase:
-    """
-    Orchestrates sending a message and streaming AI response.
-
-    This use case:
-    1. Streams LLM response chunks
-    2. Remains pure business logic (no database, no UI)
-    3. Depends on ILLMService interface (Clean Architecture)
-
-    IMPORTANT: This does NOT handle rx.session() - that's the State's job!
-    The caller (ChatState) must handle database persistence.
-    """
+    """Orchestrates sending a message and streaming AI response."""
 
     def __init__(self, llm_service: ILLMService):
-        """
-        Initialize use case with LLM service.
-
-        Args:
-            llm_service: LLM service implementation (Anthropic, OpenAI, etc.)
-        """
         self.llm = llm_service
         logger.info("[SendMessageUseCase] Initialized")
 
@@ -76,7 +49,6 @@ class SendMessageUseCase:
             ```
         """
         config = config or LLMConfig(temperature=0.7)
-
         logger.info(
             f"[SendMessageUseCase] Executing for conversation: {conversation_id}"
         )
@@ -97,36 +69,9 @@ class SendMessageUseCase:
 
 
 class LoadHistoryUseCase:
-    """
-    Load conversation history from database.
-
-    This use case:
-    1. Queries messages for a conversation
-    2. Returns them in chronological order
-    3. Uses rx.session() directly (short-lived!)
-
-    IMPORTANT: This opens and closes rx.session() immediately.
-    Do NOT hold the session during long operations.
-    """
+    """Load conversation history from database."""
 
     async def execute(self, conversation_id: str) -> List[Message]:
-        """
-        Load all messages for a conversation.
-
-        Args:
-            conversation_id: ID of the conversation
-
-        Returns:
-            List of messages in chronological order
-
-        Example:
-            ```python
-            use_case = LoadHistoryUseCase()
-            messages = await use_case.execute("conv-123")
-            for msg in messages:
-                print(f"{msg.role}: {msg.content}")
-            ```
-        """
         logger.info(f"[LoadHistoryUseCase] Loading history for: {conversation_id}")
 
         # Open session, query, close immediately
@@ -137,6 +82,10 @@ class LoadHistoryUseCase:
                 .order_by(Message.created_at)
                 .all()
             )
+
+            # CRITICAL FIX 2: Detach objects from the session before it closes!
+            # This prevents DetachedInstanceError crashes in the UI.
+            session.expunge_all()
 
             logger.info(f"[LoadHistoryUseCase] Loaded {len(messages)} messages")
             return messages
