@@ -320,3 +320,670 @@ class ChatState(rx.State):
 - ✅ `async with self:` for state mutations
 - ✅ `self.messages = self.messages` for reactivity
 - ✅ Short-lived `rx.session()` (NEVER held during streaming)
+
+---
+
+## 6. Use Case Layer (Pure Business Logic)
+
+### 6.1 SendMessageUseCase
+
+**File**: `features/chat/use_cases.py`
+
+**Responsibility**: Orchestrate message sending and LLM streaming
+
+**Key Principle**: Remains PURE - no database, no state management, only business logic
+
+```python
+from typing import AsyncGenerator
+from mychat_reflex.core.llm_ports import ILLMService, LLMConfig
+
+class SendMessageUseCase:
+    """
+    Pure business logic for sending messages.
+
+    This use case depends on ILLMService interface (Clean Architecture).
+    It does NOT handle:
+    - Database persistence (State's responsibility)
+    - UI updates (State's responsibility)
+    - rx.session() management (State's responsibility)
+
+    It ONLY handles:
+    - Streaming from LLM
+    - Business logic around message generation
+    """
+
+    def __init__(self, llm_service: ILLMService):
+        """
+        Inject LLM service dependency.
+
+        Args:
+            llm_service: Implementation of ILLMService (AnthropicAdapter, OpenAIAdapter, or FakeLLM)
+        """
+        self.llm = llm_service
+
+    async def execute(
+        self,
+        conversation_id: str,
+        user_message: str,
+        config: LLMConfig | None = None
+    ) -> AsyncGenerator[str, None]:
+        """
+        Stream AI response for user message.
+
+        Args:
+            conversation_id: The conversation context
+            user_message: User's input text
+            config: Optional LLM configuration (temperature, reasoning, etc.)
+
+        Yields:
+            Text chunks from the LLM as they arrive
+
+        Note: This method is PURE - it has no side effects.
+        The caller (ChatState) is responsible for:
+        1. Saving user message to DB before calling this
+        2. Saving AI response to DB after streaming completes
+        """
+        config = config or LLMConfig(temperature=0.7)
+
+        # Business logic: You could add prompt engineering here
+        # For example: add conversation history, RAG context, etc.
+        # For MVP, we just pass the user message directly
+
+        # Stream from LLM service
+        async for chunk in self.llm.generate_stream(prompt=user_message, config=config):
+            yield chunk
+
+        # Future: Add business logic here (e.g., post-processing, content filtering)
+```
+
+**Testing**:
+```python
+# tests/integration/test_send_message_use_case.py
+from mychat_reflex.core.llm_ports import ILLMService, LLMConfig
+from mychat_reflex.features.chat.use_cases import SendMessageUseCase
+from typing import AsyncGenerator
+
+class FakeLLMService(ILLMService):
+    """Fake LLM for testing"""
+    async def generate_stream(self, prompt: str, config: LLMConfig | None = None) -> AsyncGenerator[str, None]:
+        # Simulate streaming
+        for word in ["Hello", " ", "world", "!"]:
+            yield word
+
+async def test_send_message_use_case():
+    # Arrange
+    fake_llm = FakeLLMService()
+    use_case = SendMessageUseCase(fake_llm)
+
+    # Act
+    chunks = []
+    async for chunk in use_case.execute("conv-1", "Test prompt"):
+        chunks.append(chunk)
+
+    # Assert
+    assert "".join(chunks) == "Hello world!"
+```
+
+### 6.2 LoadHistoryUseCase
+
+**File**: `features/chat/use_cases.py`
+
+```python
+import reflex as rx
+from typing import List
+from mychat_reflex.features.chat.models import Message
+
+class LoadHistoryUseCase:
+    """
+    Load conversation message history.
+
+    This could be pure, but since it's a simple query,
+    we'll use rx.session() directly for MVP.
+    """
+
+    def execute(self, conversation_id: str) -> List[Message]:
+        """
+        Load all messages for a conversation.
+
+        Args:
+            conversation_id: The conversation to load
+
+        Returns:
+            List of messages ordered by created_at
+        """
+        with rx.session() as session:
+            messages = session.query(Message).filter(
+                Message.conversation_id == conversation_id
+            ).order_by(Message.created_at).all()
+
+            # Important: Detach from session before returning
+            session.expunge_all()
+            return messages
+```
+
+---
+
+## 7. UI Component Layer
+
+### 7.1 Component Structure
+
+**File**: `features/chat/ui.py`
+
+```python
+import reflex as rx
+from .state import ChatState
+from .models import Message
+
+def message_bubble(message: Message) -> rx.Component:
+    """
+    Render a single message bubble.
+
+    Args:
+        message: Message model instance
+
+    Returns:
+        Reflex component for message display
+    """
+    is_user = message.role == "user"
+
+    return rx.box(
+        rx.hstack(
+            # Avatar
+            rx.avatar(
+                src=message.avatar_url if is_user else "/ai-avatar.png",
+                size="sm"
+            ),
+            # Message content
+            rx.vstack(
+                rx.text(
+                    message.content,
+                    class_name="message-text",
+                ),
+                rx.text(
+                    message.timestamp_formatted,
+                    class_name="message-timestamp",
+                    size="sm",
+                    color="gray"
+                ),
+                align_items="start" if not is_user else "end",
+            ),
+            spacing="3",
+            justify="end" if is_user else "start",
+            width="100%",
+        ),
+        class_name="message-bubble-user" if is_user else "message-bubble-ai",
+    )
+
+
+def chat_history() -> rx.Component:
+    """
+    Render scrollable list of messages.
+
+    Uses rx.foreach to iterate over ChatState.messages
+    with automatic reactivity.
+    """
+    return rx.box(
+        rx.foreach(
+            ChatState.messages,
+            message_bubble,
+        ),
+        class_name="chat-history",
+        overflow_y="auto",
+        flex="1",
+    )
+
+
+def chat_input() -> rx.Component:
+    """
+    Message input area with send button.
+    """
+    return rx.hstack(
+        # Text input
+        rx.input(
+            placeholder="Type a message...",
+            value=ChatState.input_text,
+            on_change=ChatState.set_input_text,
+            on_key_down=lambda key: ChatState.handle_send_message() if key == "Enter" else None,
+            disabled=ChatState.is_generating,
+            flex="1",
+        ),
+        # Send button
+        rx.button(
+            "Send",
+            on_click=ChatState.handle_send_message,
+            disabled=ChatState.is_generating,
+        ),
+        spacing="3",
+        class_name="chat-input",
+    )
+
+
+def chat_area() -> rx.Component:
+    """
+    Main chat area - combines all chat components.
+    """
+    return rx.vstack(
+        # Header (future: add chat title, actions)
+        rx.heading(ChatState.current_chat_title, size="lg"),
+
+        # Message history
+        chat_history(),
+
+        # Input area
+        chat_input(),
+
+        class_name="chat-area",
+        height="100vh",
+        spacing="4",
+    )
+```
+
+---
+
+## 8. Integration Patterns
+
+### 8.1 Dependency Injection Pattern
+
+**Problem**: How do we inject `ILLMService` into use cases?
+
+**Solution**: Create instances in State initialization
+
+```python
+# features/chat/state.py
+import os
+from mychat_reflex.core.llm_ports import AnthropicAdapter, OpenAIAdapter, ILLMService
+
+class ChatState(rx.State):
+    # ... state variables ...
+
+    def __init__(self):
+        super().__init__()
+
+        # Dependency injection: Choose LLM provider based on config
+        provider = os.getenv("LLM_PROVIDER", "anthropic")
+
+        if provider == "anthropic":
+            self._llm_service = AnthropicAdapter(
+                api_key=os.getenv("ANTHROPIC_API_KEY"),
+                model=os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-20250514")
+            )
+        elif provider == "openai":
+            self._llm_service = OpenAIAdapter(
+                api_key=os.getenv("OPENAI_API_KEY"),
+                model=os.getenv("OPENAI_MODEL", "gpt-4o")
+            )
+        else:
+            raise ValueError(f"Unknown LLM provider: {provider}")
+```
+
+### 8.2 Error Handling Pattern
+
+```python
+@rx.background
+async def handle_send_message(self):
+    try:
+        # ... normal flow ...
+        async for chunk in use_case.execute(...):
+            full_response += chunk
+    except Exception as e:
+        # Handle errors gracefully
+        async with self:
+            error_msg = Message(
+                conversation_id=self.current_chat_id,
+                role="assistant",
+                content=f"❌ Error: {str(e)}"
+            )
+            self.messages.append(error_msg)
+            self.messages = self.messages
+            self.is_generating = False
+```
+
+### 8.3 Real-time Streaming Pattern
+
+**Option 1: Batch chunks for UI updates**
+```python
+async for chunk in use_case.execute(...):
+    full_response += chunk
+
+    # Update UI every 5 chunks to reduce WebSocket overhead
+    if len(full_response) % 5 == 0:
+        async with self:
+            # Update the last message in the list
+            self.messages[-1].content = full_response
+            self.messages = self.messages
+```
+
+**Option 2: Update on complete only (simpler for MVP)**
+```python
+async for chunk in use_case.execute(...):
+    full_response += chunk
+
+# Update UI once at the end
+async with self:
+    ai_msg = Message(...)
+    self.messages.append(ai_msg)
+    self.messages = self.messages
+```
+
+---
+
+## 9. Testing Strategy
+
+### 9.1 Unit Tests (Use Cases)
+
+**File**: `tests/unit/test_send_message_use_case.py`
+
+```python
+import pytest
+from mychat_reflex.features.chat.use_cases import SendMessageUseCase
+from tests.fakes import FakeLLMService
+
+@pytest.mark.asyncio
+async def test_send_message_streams_from_llm():
+    # Arrange
+    fake_llm = FakeLLMService(response="Hello world!")
+    use_case = SendMessageUseCase(fake_llm)
+
+    # Act
+    chunks = []
+    async for chunk in use_case.execute("conv-1", "Test"):
+        chunks.append(chunk)
+
+    # Assert
+    assert "".join(chunks) == "Hello world!"
+    assert fake_llm.was_called_with(prompt="Test")
+```
+
+### 9.2 Integration Tests (State + Use Cases)
+
+**File**: `tests/integration/test_chat_feature.py`
+
+```python
+import pytest
+import reflex as rx
+from mychat_reflex.features.chat.state import ChatState
+from mychat_reflex.features.chat.models import Message
+from tests.fakes import FakeLLMService
+
+@pytest.mark.asyncio
+async def test_send_message_integration():
+    # Arrange: Setup state with fake LLM
+    state = ChatState()
+    state._llm_service = FakeLLMService(response="Test AI response")
+
+    # Act: Send message
+    state.input_text = "Hello AI"
+    await state.handle_send_message()
+
+    # Assert: Check database persistence
+    with rx.session() as session:
+        messages = session.query(Message).filter(
+            Message.conversation_id == state.current_chat_id
+        ).all()
+
+        assert len(messages) == 2  # User + AI
+        assert messages[0].role == "user"
+        assert messages[0].content == "Hello AI"
+        assert messages[1].role == "assistant"
+        assert messages[1].content == "Test AI response"
+```
+
+### 9.3 UI Component Tests
+
+**File**: `tests/ui/test_chat_components.py`
+
+```python
+from mychat_reflex.features.chat.ui import message_bubble
+from mychat_reflex.features.chat.models import Message
+from datetime import datetime
+
+def test_message_bubble_renders_user_message():
+    # Arrange
+    msg = Message(
+        id="msg-1",
+        conversation_id="conv-1",
+        role="user",
+        content="Test message",
+        created_at=datetime.utcnow()
+    )
+
+    # Act
+    component = message_bubble(msg)
+
+    # Assert
+    assert component is not None
+    # Add more specific assertions based on Reflex testing utilities
+```
+
+---
+
+## 10. Performance Considerations
+
+### 10.1 Database Query Optimization
+
+**Problem**: Loading 1000+ messages could be slow
+
+**Solutions**:
+1. **Pagination**: Load last 50 messages, lazy-load older ones
+2. **Indexing**: Ensure `conversation_id` and `created_at` are indexed
+3. **Caching**: Cache recent messages in State (avoid repeated queries)
+
+```python
+class ChatState(rx.State):
+    _message_cache: dict[str, List[Message]] = {}
+
+    def load_messages(self, conversation_id: str):
+        # Check cache first
+        if conversation_id in self._message_cache:
+            self.messages = self._message_cache[conversation_id]
+            return
+
+        # Load from DB
+        with rx.session() as session:
+            messages = session.query(Message).filter(...).all()
+            session.expunge_all()
+
+            # Cache for future use
+            self._message_cache[conversation_id] = messages
+            self.messages = messages
+```
+
+### 10.2 Streaming Optimization
+
+**Problem**: Too many WebSocket updates during streaming
+
+**Solution**: Batch chunks before triggering reactivity
+
+```python
+CHUNK_BATCH_SIZE = 50  # characters
+
+async for chunk in use_case.execute(...):
+    full_response += chunk
+
+    # Only update UI every N characters
+    if len(full_response) % CHUNK_BATCH_SIZE == 0:
+        async with self:
+            self.messages[-1].content = full_response
+            self.messages = self.messages
+```
+
+### 10.3 Memory Management
+
+**Problem**: Long conversations consume memory
+
+**Solution**: Implement message limit and archiving
+
+```python
+MAX_MESSAGES_IN_MEMORY = 500
+
+class ChatState(rx.State):
+    def load_messages(self, conversation_id: str):
+        with rx.session() as session:
+            # Load only recent messages
+            messages = session.query(Message).filter(
+                Message.conversation_id == conversation_id
+            ).order_by(Message.created_at.desc()).limit(MAX_MESSAGES_IN_MEMORY).all()
+
+            # Reverse to chronological order
+            self.messages = list(reversed(messages))
+```
+
+---
+
+## 11. Security Considerations
+
+### 11.1 API Key Management
+
+**Critical**: Never expose API keys to browser!
+
+```python
+class ChatState(rx.State):
+    # ✅ CORRECT: Backend-only variable (starts with _)
+    _llm_service: ILLMService = None
+
+    # ❌ WRONG: Would be sent to browser!
+    # api_key: str = os.getenv("ANTHROPIC_API_KEY")
+```
+
+### 11.2 Input Validation
+
+```python
+@rx.background
+async def handle_send_message(self):
+    prompt = self.input_text.strip()
+
+    # Validate input
+    if not prompt:
+        return  # Don't send empty messages
+
+    if len(prompt) > 10000:
+        async with self:
+            self.error_message = "Message too long (max 10000 characters)"
+        return
+```
+
+### 11.3 Content Filtering (Future)
+
+```python
+def is_safe_content(text: str) -> bool:
+    """Check for inappropriate content (placeholder)"""
+    # Implement content filtering logic
+    # Could use external service or regex patterns
+    return True
+```
+
+---
+
+## 12. Deployment Considerations
+
+### 12.1 Environment Configuration
+
+**File**: `.env` (never commit!)
+```bash
+# LLM Provider
+LLM_PROVIDER=anthropic  # or "openai"
+
+# Anthropic
+ANTHROPIC_API_KEY=sk-ant-...
+ANTHROPIC_MODEL=claude-sonnet-4-20250514
+
+# OpenAI
+OPENAI_API_KEY=sk-...
+OPENAI_MODEL=gpt-4o
+
+# Database
+DATABASE_URL=sqlite:///reflex.db
+```
+
+### 12.2 Production Checklist
+
+- [ ] Environment variables configured
+- [ ] Database migrations applied (`reflex db migrate`)
+- [ ] API keys secured (use secrets manager)
+- [ ] Error logging configured
+- [ ] Performance monitoring (track LLM latency)
+- [ ] Rate limiting on LLM calls (prevent abuse)
+- [ ] HTTPS enabled (for production deployment)
+
+---
+
+## 13. Migration from Old Architecture
+
+### 13.1 What's Being Removed
+
+```
+❌ src/                          # Entire FastAPI backend
+❌ src/main.py                   # FastAPI app entry point
+❌ src/features/chat/presentation/routes.py  # HTTP endpoints
+❌ mychat_reflex/state/chat_state.py  # Old state with HTTP calls
+❌ mychat_reflex/components/      # Old component structure
+```
+
+### 13.2 What's Being Kept
+
+```
+✅ Business Logic               # Use cases remain testable
+✅ LLM Adapters                # Interface pattern preserved
+✅ Database Schema             # Similar tables, different ORM
+✅ UI Components               # Refactored to features/*/ui.py
+```
+
+### 13.3 Breaking Changes
+
+1. **No HTTP API**: Frontend can't make fetch() calls anymore
+2. **No SSE**: Use Reflex WebSocket streaming instead
+3. **No Pydantic models**: Use rx.Model instead
+4. **No FastAPI dependencies**: Install Reflex dependencies
+
+---
+
+## 14. Future Enhancements
+
+### 14.1 RAG Integration (Post-MVP)
+
+```python
+# features/chat/use_cases.py
+class SendMessageWithRAGUseCase:
+    def __init__(
+        self,
+        llm_service: ILLMService,
+        vector_store: IVectorStore  # New dependency
+    ):
+        self.llm = llm_service
+        self.vector_store = vector_store
+
+    async def execute(self, conversation_id: str, user_message: str):
+        # 1. Search vector store
+        context = await self.vector_store.search(user_message, limit=5)
+
+        # 2. Build prompt with context
+        enhanced_prompt = f"Context: {context}\n\nQuestion: {user_message}"
+
+        # 3. Stream from LLM
+        async for chunk in self.llm.generate_stream(enhanced_prompt):
+            yield chunk
+```
+
+### 14.2 Conversation Branching
+
+```python
+class Message(rx.Model, table=True):
+    id: str
+    conversation_id: str
+    parent_message_id: Optional[str] = None  # For branching
+    # ... other fields ...
+```
+
+### 14.3 Multi-modal Support
+
+```python
+class Message(rx.Model, table=True):
+    content: str  # JSON string with content parts
+    content_type: str = "text"  # "text" | "multimodal"
+
+    @property
+    def parsed_content(self):
+        if self.content_type == "multimodal":
+            return json.loads(self.content)
+        return self.content
+```
