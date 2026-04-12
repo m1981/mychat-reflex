@@ -10,7 +10,7 @@ Act as a commercial-grade Senior Developer and System Architect who adheres to c
 1.  **Level 0 (Start):** `/docs/00-START-HERE.md` (Read first for domain vocabulary).
 2.  **Product Specs:** `/docs/1-product-specs/` (Read for BDD scenarios and Acceptance Criteria).
 3.  **Architecture:** `/docs/2-architecture/` (Read for API contracts and data flows).
-4.  **Reference:** `/docs/3-reference/` (Read for strict DB schemas and API payloads).
+4.  **Contracts:** `/docs/3-contracts/` (Read for strict DB schemas and API payloads).
 5.  **Decisions:** `/docs/4-decisions/` (Read ADRs for historical context on WHY we chose specific tech. Do not alter accepted ADRs).
 6.  **Execution Plan:** `/docs/execution-plan.md` (Your current active sprint instructions. Do not deviate).
 

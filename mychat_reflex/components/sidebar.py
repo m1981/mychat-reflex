@@ -75,15 +75,21 @@ def navigation_list() -> rx.Component:
     """Main navigation with folders and chats."""
     return rx.el.nav(
         # Job offers folder
-        folder_section("Job offers", [
-            ("cv-update", "CV update"),
-            ("email-prep", "Email preparation"),
-        ]),
+        folder_section(
+            "Job offers",
+            [
+                ("cv-update", "CV update"),
+                ("email-prep", "Email preparation"),
+            ],
+        ),
         # ESP32 projects folder
-        folder_section("ESP32 projects", [
-            ("esp32-overview", "ESP32 overview"),
-            ("first-project", "First ESP project"),
-        ]),
+        folder_section(
+            "ESP32 projects",
+            [
+                ("esp32-overview", "ESP32 overview"),
+                ("first-project", "First ESP project"),
+            ],
+        ),
         class_name="flex-1 overflow-y-auto px-4 space-y-4",
     )
 

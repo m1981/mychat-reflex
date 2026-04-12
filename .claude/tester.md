@@ -29,11 +29,11 @@ You are the Strict Tester. Your single responsibility is to translate BDD scenar
 
 ### Here is the strict Access Control List (ACL) for your repository:
 
-| Directory / File | The Specificator | The Tester | The Developer |
-| :--- | :---: | :---: | :---: |
-| `00-START-HERE.md` | 📖 Read | 📖 Read | 📖 Read |
+| Directory / File    | The Specificator | The Tester | The Developer |
+|:--------------------| :---: | :---: | :---: |
+| `00-START-HERE.md`  | 📖 Read | 📖 Read | 📖 Read |
 | `/1-product-specs/` | ✍️ **WRITE** | 📖 Read | 📖 Read |
-| `/3-reference/` | ✍️ **WRITE** | 📖 Read | 📖 Read |
-| `tests/` | 🚫 Blocked | ✍️ **WRITE** | 📖 Read |
-| `src/` | 🚫 Blocked | 🚫 Blocked | ✍️ **WRITE** |
-| `/2-architecture/` | 🚫 Blocked | 🚫 Blocked | ✍️ **WRITE** |
+| `/3-contracts/`     | ✍️ **WRITE** | 📖 Read | 📖 Read |
+| `tests/`            | 🚫 Blocked | ✍️ **WRITE** | 📖 Read |
+| `src/`              | 🚫 Blocked | 🚫 Blocked | ✍️ **WRITE** |
+| `/2-architecture/`  | 🚫 Blocked | 🚫 Blocked | ✍️ **WRITE** |

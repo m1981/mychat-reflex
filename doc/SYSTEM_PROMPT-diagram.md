@@ -19,7 +19,7 @@ graph TD
         L0[(00-START-HERE.md)] -.-> |Domain Vocab & Vertical Slices| Engine((Agent Engine))
         L1[/1-product-specs/] -.-> |THE LAW: Prescriptive Specs| Engine
         L2[/2-architecture/] -.-> |THE REFLECTION: Descriptive Docs| Engine
-        L3[/3-reference/] -.-> |STRICT CONTRACTS: DB/API/SSE| Engine
+        L3[/3-contracts/] -.-> |STRICT CONTRACTS: DB/API/SSE| Engine
         L4[/4-decisions/] -.-> |HISTORICAL WHY: Immutable ADRs| Engine
         EP[/execution-plan.md/] -.-> |CURRENT SPRINT: Active Tasks| Engine
     end
@@ -52,7 +52,7 @@ graph TD
         SpecAlign -- Yes --> Yield2((YIELD 2: Stop & Wait for Human to confirm tests pass))
 
         Yield2 --> DocCheck{Did Component Tree, DB Schema, Status, or Architecture Change?}
-        DocCheck -- Yes --> UpdateDocs[Update /2-architecture, /3-reference & YAML Status Flags]
+        DocCheck -- Yes --> UpdateDocs[Update /2-architecture, /3-contracts & YAML Status Flags]
         DocCheck -- No --> CommitPrep[Stage ONLY explicitly touched files]
 
         UpdateDocs --> CommitPrep

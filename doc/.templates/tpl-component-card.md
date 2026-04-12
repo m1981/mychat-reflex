@@ -20,13 +20,13 @@ DON'TS:
 *   **Responsibility:** [What is the single responsibility of this module?]
 *   **Input:** `[Data Type]`
 *   **Output:** `[Data Type]`
-*   **Injected Interfaces (Ports):** 
+*   **Injected Interfaces (Ports):**
     *   [Emoji] `[Interface Name, e.g., IVectorStore]` - [Why it's needed]
 *   **Concrete Dependencies (Only if Infrastructure/Presentation):**
     *   [Emoji] `[Library/DB, e.g., chromadb, fastapi]`
 
 ## Dependencies (Dependency Inversion)
-*   **Injected Interfaces (Ports):** 
+*   **Injected Interfaces (Ports):**
     *   🔌 `[Interface Name, e.g., IVectorStore]` - [Why it's needed]
 *   **Concrete Dependencies (Only allowed if Infrastructure/Presentation):**
     *   📦 `[Library/DB, e.g., chromadb, fastapi, sqlalchemy]`

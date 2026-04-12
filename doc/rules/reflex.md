@@ -1,5 +1,5 @@
 ### 1. Tooling & Environment
-In v0.8+, Reflex relies heavily on Python type hints to compile the frontend correctly. 
+In v0.8+, Reflex relies heavily on Python type hints to compile the frontend correctly.
 *   **Strict Type Checking:** You *must* use a type checker like `pyright` or `mypy`. Reflex uses your type annotations (e.g., `list[dict]`, `str`, `int`) to determine how to serialize data over the WebSocket and what React prop types to generate. Missing types will cause silent frontend bugs.
 *   **Linting with Ruff:** Use `ruff` for formatting and linting. It’s lightning-fast and integrates perfectly with the modern `uv` workflow you are already using.
 *   **Environment Variables:** Never hardcode secrets. Use `python-dotenv` or Reflex's built-in config to load `.env` files. Reflex v0.8+ handles environment variables cleanly between the build step and runtime.
@@ -7,14 +7,14 @@ In v0.8+, Reflex relies heavily on Python type hints to compile the frontend cor
 ### 2. The "Backend-Only" Variable Rule (Crucial)
 The #1 mistake new Reflex developers make is accidentally sending massive amounts of data to the React frontend, crashing the browser.
 *   **The Rule:** If the React frontend doesn't need to *display* it, prefix the variable with an underscore (`_`).
-*   **Why?** Variables starting with `_` are **backend-only**. They are not serialized into JSON and are not sent over the WebSocket. 
+*   **Why?** Variables starting with `_` are **backend-only**. They are not serialized into JSON and are not sent over the WebSocket.
 ```python
 class DataState(rx.State):
     # Sent to the browser (keep it small!)
-    display_table: list[dict] = [] 
-    
+    display_table: list[dict] = []
+
     # Stays on the server (can be a massive 2GB Pandas DataFrame)
-    _raw_data: pd.DataFrame = None 
+    _raw_data: pd.DataFrame = None
 ```
 
 ### 3. Debugging the WebSocket Bridge
@@ -23,7 +23,7 @@ When things break in Reflex, it's rarely a standard Python error. It's usually a
 *   **Watch the Network Tab:** Open your browser's DevTools, go to the Network tab, and filter by `WS` (WebSockets). Click on the active connection and look at the "Messages". You will see exactly what JSON payloads Python is sending to React. If the payload is 5MB, you have a state architecture problem.
 
 ### 4. UI Compilation vs. Runtime Execution
-You must understand *when* your code runs. 
+You must understand *when* your code runs.
 *   Your `def index() -> rx.Component:` function runs **exactly once** during the `reflex run` compilation phase. It generates the React AST (Abstract Syntax Tree).
 *   Therefore, you **cannot** use standard Python `if/else` statements to conditionally render UI based on `rx.State` variables, because the state doesn't exist at compile time!
 *   **Best Practice:** Always use Reflex's conditional rendering components (`rx.cond` or `rx.match`) when depending on state variables.
@@ -55,11 +55,11 @@ class ChatState(rx.State):
     async def fetch_ai_response(self):
         # 1. Set loading to True and immediately update the UI
         self.is_loading = True
-        yield 
-        
+        yield
+
         # 2. Do the heavy lifting (UI is currently showing a spinner)
-        result = await call_openai_api() 
-        
+        result = await call_openai_api()
+
         # 3. Update the final state
         self.response = result
         self.is_loading = False
@@ -80,11 +80,11 @@ class DashboardState(rx.State):
     async def fetch_initial_data(self):
         # 1. UI is already visible (showing skeletons). We yield to ensure is_loading=True is sent.
         self.is_loading = True
-        yield 
-        
+        yield
+
         # 2. Await the heavy DB call without blocking the event loop
         self.metrics = await db.get_heavy_metrics()
-        
+
         # 3. Turn off loading state
         self.is_loading = False
         # Implicit yield updates the UI with real data
@@ -137,14 +137,14 @@ class ReportState(rx.State):
         async with self:
             self.is_generating = True
             self.progress = 0
-        
+
         for i in range(10):
             await asyncio.sleep(1) # Simulating heavy work
-            
+
             # Lock state only briefly to update progress
             async with self:
                 self.progress = (i + 1) * 10
-                
+
         async with self:
             self.is_generating = False
 ```
