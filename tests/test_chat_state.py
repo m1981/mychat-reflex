@@ -207,12 +207,17 @@ def test_llm_service_is_backend_only():
 
     # Verify the attribute exists and is prefixed with _
     assert hasattr(state, "_llm_service")
-    # LLM service is initialized lazily, so it starts as None
+    # LLM service is NOT cached (starts as None and stays None)
     assert state._llm_service is None
-    # After calling _get_llm_service(), it should be initialized
+    # _get_llm_service() creates a fresh instance each time
     llm = state._get_llm_service()
     assert llm is not None
-    assert state._llm_service is not None
+    # Verify it's NOT cached (still None after calling _get_llm_service)
+    assert state._llm_service is None
+    # Verify each call creates a new instance
+    llm2 = state._get_llm_service()
+    assert llm2 is not None
+    assert llm is not llm2  # Different instances
 
 
 def test_messages_list_is_mutable():

@@ -83,17 +83,18 @@ class ChatState(rx.State):
 
     def _get_llm_service(self) -> ILLMService:
         """
-        Get or create the LLM service instance (lazy initialization).
+        Create a fresh LLM service instance.
 
-        ARCHITECT NOTE: We cache this on `self._llm_service` for reuse.
-        The underscore prefix prevents Reflex from serializing it to the frontend.
+        ARCHITECT NOTE: We create a new instance each time instead of caching
+        because:
+        1. Anthropic's AsyncClient contains asyncio locks (not serializable)
+        2. Caching would require `async with self:` in background tasks
+        3. Creating a new client is cheap (just wraps the API key)
         """
-        if self._llm_service is None:
-            self._llm_service = AnthropicAdapter(
-                api_key=os.getenv("ANTHROPIC_API_KEY", ""),
-                model="claude-sonnet-4-5",
-            )
-        return self._llm_service
+        return AnthropicAdapter(
+            api_key=os.getenv("ANTHROPIC_API_KEY", ""),
+            model="claude-sonnet-4-5",
+        )
 
     # ========================================================================
     # COMPUTED PROPERTIES
