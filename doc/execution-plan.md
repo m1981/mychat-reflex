@@ -102,21 +102,26 @@ mychat_reflex/
     - `mychat_reflex/features/workspace/__init__.py` - Workspace feature documentation
 
 #### Task 1.2: Migrate Core Interfaces (Ports)
-*   **Status:** [ ] Not Started
+*   **Status:** [x] COMPLETE
+*   **Completed:** 2026-04-12
 *   **Source Files:**
     - `src/core/domain/entities.py` (Role, LLMConfig)
     - `src/core/domain/interfaces.py` (ILLMService)
     - `src/infrastructure/llm/anthropic_adapter.py`
     - `src/infrastructure/llm/openai_adapter.py`
 *   **Target File:** `mychat_reflex/core/llm_ports.py`
-*   **Changes Required:**
-    1. Copy `Role` enum from `src/core/domain/entities.py`
-    2. Copy `LLMConfig` from `src/core/domain/entities.py`
-    3. Copy `ILLMService` interface from `src/core/domain/interfaces.py`
-    4. Copy `AnthropicAdapter` and `OpenAIAdapter` (remove FastAPI dependencies)
-    5. Remove multimodal content support (simplify to string-only for MVP)
-*   **Testing:** Create `tests/test_llm_ports.py` with fake LLM adapter
-*   **Commits:** `refactor: migrate LLM ports to Reflex core`
+*   **Changes Completed:**
+    1. ✅ Migrated `Role` enum (USER, ASSISTANT, SYSTEM)
+    2. ✅ Migrated `LLMConfig` (temperature, enable_reasoning, reasoning_budget)
+    3. ✅ Migrated `ILLMService` interface - simplified to string-only prompts
+    4. ✅ Migrated `AnthropicAdapter` - simplified, removed multimodal support
+    5. ✅ Migrated `OpenAIAdapter` - simplified, removed multimodal support
+    6. ✅ Updated `mychat_reflex/core/__init__.py` to export all classes
+*   **Simplifications Made:**
+    - Removed `ChatMessage`, `TextPart`, `ImagePart`, `DocumentPart` (no multimodal for MVP)
+    - Changed `generate_stream()` signature from `List[ChatMessage]` to simple `str prompt`
+    - Removed `IVectorStore` and `IConversationRepo` (will be handled differently in Reflex)
+    - Kept clean architecture: use cases will depend on `ILLMService` interface
 
 #### Task 1.3: Setup Reflex Database Configuration
 *   **Status:** [ ] Not Started
