@@ -18,20 +18,15 @@ help: ## Display this help
 run: ## Run the Reflex frontend (port 3000)
 	uv run reflex run
 
-.PHONY: run-backend
-run-backend: ## Run the FastAPI backend (port 8080)
-	uv run uvicorn src.main:app --host 0.0.0.0 --port 8080 --reload
-
 .PHONY: dev
-dev: ## Run backend then remind to run frontend in another terminal
-	@echo "$(YELLOW)Start frontend in a second terminal: make run$(RESET)"
-	uv run uvicorn src.main:app --host 0.0.0.0 --port 8080 --reload
+dev: ## Run Reflex in development mode (frontend + backend)
+	uv run reflex run
 
 .PHONY: test-cov
 test-cov: ## Run UNIT tests with strict coverage (Fail under 80%, excludes UI and integration tests)
 	@echo "$(GREEN)Running Unit Tests with Coverage Check...$(RESET)"
 	uv run pytest -m "unit" \
-		--cov=school_hub \
+		--cov=mychat_reflex \
 		--cov-report=term-missing \
 		--cov-report=html \
 		--cov-fail-under=80
@@ -40,7 +35,7 @@ test-cov: ## Run UNIT tests with strict coverage (Fail under 80%, excludes UI an
 test-cov-simple: ## Run ALL tests with simple console coverage report (shows missing lines)
 	@echo "$(GREEN)Running All Tests with Simple Coverage Report...$(RESET)"
 	uv run pytest \
-		--cov=src \
+		--cov=mychat_reflex \
 		--cov-report=term-missing \
 		--cov-fail-under=0
 

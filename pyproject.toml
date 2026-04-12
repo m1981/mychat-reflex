@@ -17,7 +17,7 @@ dependencies = [
 ]
 
 [tool.setuptools]
-packages = ["school_hub"]
+packages = ["mychat_reflex"]
 
 [dependency-groups]
 dev = [
@@ -49,7 +49,7 @@ filterwarnings = [
     "ignore:Using `@model_validator` with mode='after' on a classmethod is deprecated:pydantic.warnings.PydanticDeprecatedSince20"
 ]
 [tool.coverage.run]
-source = ["school_hub"]
+source = ["mychat_reflex"]
 branch = true
 omit = [
     "*/__init__.py",
