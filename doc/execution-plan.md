@@ -145,77 +145,48 @@ mychat_reflex/
 ### **Phase 2: Migrate Chat Models (Unified Approach)** 🎯
 
 #### Task 2.1: Create Unified Message Model
-*   **Status:** [ ] Not Started
+*   **Status:** [x] COMPLETE
+*   **Completed:** 2026-04-12
 *   **Source Files:**
     - `src/core/database/models.py` (Message ORM)
     - `mychat_reflex/state/chat_state.py` (Message Pydantic)
 *   **Target File:** `mychat_reflex/features/chat/models.py`
-*   **Implementation:**
-    ```python
-    import reflex as rx
-    from typing import Optional
-    from datetime import datetime
-
-    class Message(rx.Model, table=True):
-        """Unified Message model - DB Table + Domain Entity + UI State"""
-
-        # Database fields (from src/core/database/models.py)
-        id: str
-        conversation_id: str
-        role: str  # "user" | "assistant" | "system"
-        content: str
-        created_at: datetime = datetime.utcnow()
-        model_used: Optional[str] = None
-
-        # UI-specific fields (from mychat_reflex Message)
-        is_user: bool  # Computed from role
-        timestamp: str  # Formatted created_at
-        avatar_url: Optional[str] = None
-    ```
-*   **Breaking Changes:**
-    - Merge two separate Message classes into one
-    - Remove polymorphic content (TextPart, ImagePart) for now
-    - Add computed properties for UI fields
-*   **Testing:** Unit tests for Message creation, validation
-*   **Commits:** `refactor: create unified Message rx.Model`
+*   **Implementation Completed:**
+    - ✅ Created Message rx.Model with all fields (id, conversation_id, role, content, created_at)
+    - ✅ Added metadata fields (model_used, avatar_url)
+    - ✅ Added computed properties (@property): is_user, is_assistant, timestamp_formatted
+    - ✅ Simplified to string-only content (removed polymorphic TextPart/ImagePart)
+    - ✅ Added __repr__ for debugging
+    - ✅ Comprehensive docstrings explaining unified model approach
 
 #### Task 2.2: Create Unified Conversation Model
-*   **Status:** [ ] Not Started
+*   **Status:** [x] COMPLETE
+*   **Completed:** 2026-04-12
 *   **Source Files:**
     - `src/core/database/models.py` (Conversation ORM)
     - `mychat_reflex/state/chat_state.py` (Chat Pydantic)
 *   **Target File:** `mychat_reflex/features/chat/models.py`
-*   **Implementation:**
-    ```python
-    class Conversation(rx.Model, table=True):
-        """Unified Conversation model"""
-
-        id: str
-        title: str = "New Chat"
-        folder_id: Optional[str] = None
-        created_at: datetime = datetime.utcnow()
-        updated_at: datetime = datetime.utcnow()
-
-        # Relationships will be handled by Reflex ORM
-    ```
-*   **Testing:** Test conversation creation, folder assignment
-*   **Commits:** `refactor: create unified Conversation rx.Model`
+*   **Implementation Completed:**
+    - ✅ Created Conversation rx.Model (id, title, folder_id, created_at, updated_at)
+    - ✅ folder_id is nullable (conversations can exist without folders)
+    - ✅ Added computed property: is_in_folder
+    - ✅ Added __repr__ for debugging
+    - ✅ Removed explicit relationship (will query via FK)
 
 #### Task 2.3: Create ChatFolder Model
-*   **Status:** [ ] Not Started
+*   **Status:** [x] COMPLETE
+*   **Completed:** 2026-04-12
 *   **Source:** `mychat_reflex/state/chat_state.py` (ChatFolder Pydantic)
 *   **Target File:** `mychat_reflex/features/chat/models.py`
-*   **Implementation:**
-    ```python
-    class ChatFolder(rx.Model, table=True):
-        """Chat organization folders"""
+*   **Implementation Completed:**
+    - ✅ Created ChatFolder rx.Model (id, name, created_at)
+    - ✅ No explicit chats list (query Conversations by folder_id)
+    - ✅ Flat structure only (no folder nesting for MVP)
+    - ✅ Added __repr__ for debugging
+    - ✅ Note: Will move to features/workspace/ in future phase
 
-        id: str
-        name: str
-        created_at: datetime = datetime.utcnow()
-    ```
-*   **Testing:** Test folder CRUD operations
-*   **Commits:** `refactor: create ChatFolder rx.Model`
+**All models in single file:** `mychat_reflex/features/chat/models.py` (146 lines)
+**Exports updated:** `mychat_reflex/features/chat/__init__.py`
 
 ---
 
