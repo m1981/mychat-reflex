@@ -15,9 +15,12 @@ Responsibilities:
 """
 
 from .models import Message, Conversation, ChatFolder
+from .use_cases import SendMessageUseCase, LoadHistoryUseCase
 
 __all__ = [
     "Message",
     "Conversation",
     "ChatFolder",
+    "SendMessageUseCase",
+    "LoadHistoryUseCase",
 ]

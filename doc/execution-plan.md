@@ -193,65 +193,36 @@ mychat_reflex/
 ### **Phase 3: Migrate Use Cases (Pure Business Logic)** 🧠
 
 #### Task 3.1: Create SendMessageUseCase (Reflex-native)
-*   **Status:** [ ] Not Started
+*   **Status:** [x] COMPLETE
+*   **Completed:** 2026-04-12
 *   **Source File:** `src/features/chat/use_cases/send_message.py`
 *   **Target File:** `mychat_reflex/features/chat/use_cases.py`
-*   **Key Changes:**
-    1. Remove `IConversationRepo` - direct `rx.session()` usage
-    2. Remove `IVectorStore` - simplify to no RAG for MVP
-    3. Keep `ILLMService` interface - PRESERVE CLEAN ARCHITECTURE
-    4. Return `AsyncGenerator[str, None]` for streaming
-*   **Implementation:**
-    ```python
-    from mychat_reflex.core.llm_ports import ILLMService, LLMConfig
-    from .models import Message, Conversation
-    import reflex as rx
-
-    class SendMessageUseCase:
-        def __init__(self, llm_service: ILLMService):
-            self.llm = llm_service
-
-        async def execute(
-            self,
-            conversation_id: str,
-            user_message: str
-        ) -> AsyncGenerator[str, None]:
-            """
-            Orchestrates sending a message and streaming AI response.
-
-            IMPORTANT: This does NOT handle rx.session() - that's the State's job!
-            Caller must handle database persistence.
-            """
-            # Stream from LLM
-            async for chunk in self.llm.generate_stream(
-                prompt=user_message,
-                config=LLMConfig(temperature=0.7)
-            ):
-                yield chunk
-    ```
+*   **Implementation Completed:**
+    - ✅ Created SendMessageUseCase with ILLMService dependency
+    - ✅ Streams LLM response chunks via AsyncGenerator[str, None]
+    - ✅ Remains pure business logic (no rx.session(), no UI)
+    - ✅ Depends on interface, not concrete adapter (Clean Architecture)
+    - ✅ Created comprehensive unit tests with FakeLLM
+    - ✅ All 4 tests passing (test_send_message_use_case.py)
 *   **Reflex Rules Applied:**
     - ✅ Does NOT hold `rx.session()` during LLM call
     - ✅ Remains pure business logic
     - ✅ Depends on interface, not concrete adapter
-*   **Testing:** Create `tests/test_send_message_use_case.py` with FakeLLM
-*   **Commits:** `refactor: migrate SendMessageUseCase to Reflex`
+*   **Files Created:**
+    - `mychat_reflex/features/chat/use_cases.py` (SendMessageUseCase, LoadHistoryUseCase)
+    - `tests/test_send_message_use_case.py` (4 passing tests)
+*   **Exports Updated:** `mychat_reflex/features/chat/__init__.py`
 
 #### Task 3.2: Create LoadHistoryUseCase
-*   **Status:** [ ] Not Started
+*   **Status:** [x] COMPLETE
+*   **Completed:** 2026-04-12
 *   **Target File:** `mychat_reflex/features/chat/use_cases.py`
-*   **Implementation:**
-    ```python
-    class LoadHistoryUseCase:
-        async def execute(self, conversation_id: str) -> List[Message]:
-            """Load conversation history from database"""
-            # Direct rx.session() query
-            with rx.session() as session:
-                messages = session.query(Message).filter(
-                    Message.conversation_id == conversation_id
-                ).order_by(Message.created_at).all()
-                return messages
-    ```
-*   **Commits:** `feat: add LoadHistoryUseCase`
+*   **Implementation Completed:**
+    - ✅ Created LoadHistoryUseCase with rx.session() query
+    - ✅ Returns List[Message] in chronological order
+    - ✅ Opens and closes session immediately (short-lived)
+    - ✅ Included in same file as SendMessageUseCase
+*   **Note:** Already implemented alongside Task 3.1
 
 ---
 
