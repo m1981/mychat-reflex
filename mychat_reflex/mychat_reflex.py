@@ -22,4 +22,4 @@ app = rx.App(
         "/styles.css",  # Custom scrollbar styles
     ],
 )
-app.add_page(index, title="Super Chat")
+app.add_page(index, title="Super Chat 2")
