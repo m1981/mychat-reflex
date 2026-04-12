@@ -9,14 +9,11 @@ class RAGPromptBuilder:
     """
 
     def build_messages(
-            self,
-            history: List[ChatMessage],
-            context: List[SearchResult]
+        self, history: List[ChatMessage], context: List[SearchResult]
     ) -> List[ChatMessage]:
         # 1. Format the retrieved context
         context_text = "\n\n".join(
-            f"[Source {i + 1}]: {result.text}"
-            for i, result in enumerate(context)
+            f"[Source {i + 1}]: {result.text}" for i, result in enumerate(context)
         )
 
         system_instruction = (
@@ -27,9 +24,7 @@ class RAGPromptBuilder:
         )
 
         # 2. Create the System Message
-        messages = [
-            ChatMessage(role=Role.SYSTEM, content=system_instruction)
-        ]
+        messages = [ChatMessage(role=Role.SYSTEM, content=system_instruction)]
 
         # 3. Append the conversation history (which includes the latest user message)
         messages.extend(history)

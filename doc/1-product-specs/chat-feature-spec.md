@@ -203,7 +203,7 @@ Acceptance Criteria:
 ## 5. Data Requirements
 
 ### 5.1 Message Data Model
-See `doc/3-reference/database-schema.md` for full schema.
+See `doc/3-contracts/database-schema.md` for full schema.
 
 **Key Fields**:
 - `id`: Unique identifier

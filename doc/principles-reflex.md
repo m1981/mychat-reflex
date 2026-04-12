@@ -29,7 +29,7 @@ The `rx.State` is the brain of your app, but it is also the primary bottleneck i
     ```python
     class CartState(rx.State):
         items: list[dict] = []
-        
+
         @rx.var
         def total_price(self) -> float:
             return sum(item['price'] for item in self.items)

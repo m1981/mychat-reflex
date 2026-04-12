@@ -15,7 +15,9 @@ class Conversation(Base):
     id: Mapped[str] = mapped_column(String, primary_key=True)
     title: Mapped[str] = mapped_column(String, default="New Chat")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
 
     # Relationship: One Conversation has Many Messages
     messages: Mapped[List["Message"]] = relationship(
@@ -47,10 +49,14 @@ class Note(Base):
     content: Mapped[str] = mapped_column(Text)
 
     # The magic link: Which chat bubble did this note come from?
-    source_message_id: Mapped[Optional[str]] = mapped_column(ForeignKey("messages.id"), nullable=True)
+    source_message_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("messages.id"), nullable=True
+    )
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
 
     # Relationship
     source_message: Mapped[Optional["Message"]] = relationship(back_populates="notes")
