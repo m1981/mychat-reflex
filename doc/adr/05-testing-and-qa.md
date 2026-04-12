@@ -20,4 +20,3 @@ When dealing with cutting-edge AI features (like Anthropic's "Thinking" or OpenA
 Here are the Architecture Decision Records (ADRs) documenting this choice, specifically addressing the **corner edge cases** your adapters will need to handle. You should append these to your `adrs.md` file.
 
 ***
-

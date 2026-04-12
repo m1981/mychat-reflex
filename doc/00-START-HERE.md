@@ -53,7 +53,7 @@ The codebase strictly follows **Vertical Slice (Screaming) Architecture**. Do no
 │   ├── refactor.md                 ← Migration strategy (dual-backend → monolith)
 │   ├── /1-product-specs/           ← Feature requirements (The "What")
 │   ├── /2-architecture/            ← Component contracts (The "How")
-│   ├── /3-reference/               ← DB schemas & data flows (The "Truth")
+│   ├── /3-contracts/               ← DB schemas & data flows (The "Truth")
 │   └── /adr/                       ← Architecture Decision Records
 │
 ├── mychat_reflex/                  ← REFLEX MONOLITH (Source Code)
