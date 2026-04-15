@@ -1,10 +1,16 @@
 """
 Chat Use Cases - Pure Business Logic.
+
+Architectural Rules Applied:
+- Clean Architecture: No framework imports (Reflex is completely removed).
+- CQS: SendMessageUseCase is a Command (orchestrates side effects).
+       LoadHistoryUseCase is a Query (reads data).
+- Dependency Injection: Database sessions and LLM services are passed in.
 """
 
 import logging
 from typing import AsyncGenerator, List, Optional
-import reflex as rx
+from sqlmodel import Session
 
 from mychat_reflex.core.llm_ports import ILLMService, LLMConfig
 from .models import Message
@@ -28,7 +34,7 @@ class SendMessageUseCase:
         self,
         conversation_id: str,
         user_message: str,
-        history: List[Message],  # ✅ CRITICAL FIX: Added history parameter
+        history: List[Message],
         config: Optional[LLMConfig] = None,
     ) -> AsyncGenerator[str, None]:
         """
@@ -37,17 +43,11 @@ class SendMessageUseCase:
         Args:
             conversation_id: ID of the conversation
             user_message: User's message text
+            history: Previous messages in the conversation
             config: Optional LLM configuration
 
         Yields:
             Text chunks from the LLM as they arrive
-
-        Example:
-            ```python
-            use_case = SendMessageUseCase(llm_service)
-            async for chunk in use_case.execute("conv-123", "Hello"):
-                print(chunk, end="")
-            ```
         """
         config = config or LLMConfig(temperature=0.7)
 
@@ -60,7 +60,7 @@ class SendMessageUseCase:
         logger.info(f"[SendMessageUseCase] Config: {config}")
         logger.info("-" * 80)
 
-        # ✅ CRITICAL FIX: Format the history so the AI has memory
+        # Format the history so the AI has memory
         transcript = ""
         for i, msg in enumerate(history):
             speaker = "User" if msg.is_user else "Assistant"
@@ -100,21 +100,29 @@ class SendMessageUseCase:
 class LoadHistoryUseCase:
     """Load conversation history from database."""
 
-    async def execute(self, conversation_id: str) -> List[Message]:
+    async def execute(self, session: Session, conversation_id: str) -> List[Message]:
+        """
+        Execute the query to load history.
+
+        Args:
+            session: An active database session (injected by the caller)
+            conversation_id: The ID of the conversation to load
+
+        Returns:
+            List of Message objects
+        """
         logger.info(f"[LoadHistoryUseCase] Loading history for: {conversation_id}")
 
-        # Open session, query, close immediately
-        with rx.session() as session:
-            messages = (
-                session.query(Message)
-                .filter(Message.conversation_id == conversation_id)
-                .order_by(Message.created_at)
-                .all()
-            )
+        messages = (
+            session.query(Message)
+            .filter(Message.conversation_id == conversation_id)
+            .order_by(Message.created_at)
+            .all()
+        )
 
-            # CRITICAL FIX 2: Detach objects from the session before it closes!
-            # This prevents DetachedInstanceError crashes in the UI.
-            session.expunge_all()
+        # Detach objects from the session before returning them.
+        # This prevents DetachedInstanceError crashes in the UI layer.
+        session.expunge_all()
 
-            logger.info(f"[LoadHistoryUseCase] Loaded {len(messages)} messages")
-            return messages
+        logger.info(f"[LoadHistoryUseCase] Loaded {len(messages)} messages")
+        return messages

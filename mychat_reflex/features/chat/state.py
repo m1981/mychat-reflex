@@ -1,30 +1,23 @@
 """
 Chat State - UI Controller for Chat Feature.
 
-This module contains ChatState (rx.State) which:
-1. Manages UI state (input_text, is_generating, messages)
-2. Orchestrates use cases (SendMessageUseCase, LoadHistoryUseCase)
-3. Handles rx.session() safely (short-lived sessions)
-4. Pushes WebSocket updates to frontend
-
-CRITICAL REFLEX RULES APPLIED:
-- @rx.event(background=True) decorator for async LLM operations
-- async with self: for all state mutations
-- self.messages = self.messages to trigger reactivity
-- Open rx.session(), write, close immediately (NEVER hold during LLM streaming)
-- Pydantic Cloning: .model_dump() used to prevent DetachedInstanceError
+Architectural Rules Applied:
+1. ViewModel Pattern: This class only manages UI state and delegates business logic to Use Cases.
+2. Dependency Injection (ADR 015): Resolves ILLMService via AppContainer, removing vendor lock-in.
+3. WebSocket Buffering (ADR 002-V2): Batches LLM chunks before yielding to prevent UI freezing.
+4. Safe DB Sessions: rx.session() is opened, passed to Use Cases, and closed immediately.
 """
 
 import logging
-import os
 import reflex as rx
 from datetime import datetime, timezone
 from typing import Optional
 from uuid import uuid4
 
-from mychat_reflex.core.llm_ports import AnthropicAdapter, ILLMService, LLMConfig
+from mychat_reflex.core.di import AppContainer
+from mychat_reflex.core.llm_ports import LLMConfig
 from .models import Message, Conversation, ChatFolder
-from .use_cases import SendMessageUseCase
+from .use_cases import SendMessageUseCase, LoadHistoryUseCase
 
 logger = logging.getLogger(__name__)
 
@@ -42,12 +35,7 @@ class ChatState(rx.State):
     - UI state management (input_text, is_generating)
     - Database session management (rx.session() safety)
     - Use case orchestration (calls SendMessageUseCase)
-    - WebSocket updates to frontend
-
-    IMPORTANT: This follows Reflex's async rules!
-    - @rx.event(background=True) for async operations
-    - async with self: for state mutations
-    - Short-lived rx.session() (never held during LLM streaming)
+    - WebSocket updates to frontend (with buffering)
     """
 
     # ========================================================================
@@ -71,30 +59,7 @@ class ChatState(rx.State):
     chats: list[Conversation] = []
 
     # UI preferences
-    selected_model: str = "Claude Sonnet 4"
-
-    # ========================================================================
-    # BACKEND-ONLY STATE (Not Sent to Browser)
-    # ========================================================================
-
-    # LLM service instance (prefixed with _ so Reflex doesn't serialize it)
-    # Initialized lazily to avoid pickling issues with AsyncAnthropic client
-    _llm_service: Optional[AnthropicAdapter] = None
-
-    def _get_llm_service(self) -> ILLMService:
-        """
-        Create a fresh LLM service instance.
-
-        ARCHITECT NOTE: We create a new instance each time instead of caching
-        because:
-        1. Anthropic's AsyncClient contains asyncio locks (not serializable)
-        2. Caching would require `async with self:` in background tasks
-        3. Creating a new client is cheap (just wraps the API key)
-        """
-        return AnthropicAdapter(
-            api_key=os.getenv("ANTHROPIC_API_KEY", ""),
-            model="claude-sonnet-4-5",
-        )
+    selected_model: str = "Claude Sonnet 4.5"
 
     # ========================================================================
     # COMPUTED PROPERTIES
@@ -120,21 +85,18 @@ class ChatState(rx.State):
     # LIFECYCLE METHODS
     # ========================================================================
 
-    def on_load(self):
+    async def on_load(self):
         """Load data when page loads."""
         logger.info("[ChatState] on_load triggered")
 
-        # Load messages for current conversation
+        # Load messages using the pure Use Case
+        use_case = LoadHistoryUseCase()
         with rx.session() as session:
-            db_messages = (
-                session.query(Message)
-                .filter(Message.conversation_id == self.current_conversation_id)
-                .order_by(Message.created_at)
-                .all()
-            )
+            db_messages = await use_case.execute(session, self.current_conversation_id)
             # ✅ CRITICAL FIX: Clone into pure in-memory objects
             self.messages = [Message(**m.model_dump()) for m in db_messages]
 
+        # Load sidebar data
         with rx.session() as session:
             db_folders = session.query(ChatFolder).all()
             db_chats = session.query(Conversation).all()
@@ -143,7 +105,7 @@ class ChatState(rx.State):
             self.chats = [Conversation(**c.model_dump()) for c in db_chats]
 
     # ========================================================================
-    # UI EVENT HANDLERS (Synchronous)
+    # UI EVENT HANDLERS (Synchronous / Fast Async)
     # ========================================================================
 
     def set_input_text(self, value: str):
@@ -152,7 +114,7 @@ class ChatState(rx.State):
     def set_sidebar_search(self, value: str):
         self.sidebar_search = value
 
-    def select_chat(self, chat_id: str):
+    async def select_chat(self, chat_id: str):
         """Select a different conversation."""
         logger.info(f"[ChatState] Selecting chat: {chat_id}")
 
@@ -164,15 +126,10 @@ class ChatState(rx.State):
                 self.current_chat_title = chat.title
                 break
 
-        # Load messages
+        # Load messages using the pure Use Case
+        use_case = LoadHistoryUseCase()
         with rx.session() as session:
-            db_messages = (
-                session.query(Message)
-                .filter(Message.conversation_id == chat_id)
-                .order_by(Message.created_at)
-                .all()
-            )
-            # ✅ CRITICAL FIX: Clone into pure in-memory objects
+            db_messages = await use_case.execute(session, chat_id)
             self.messages = [Message(**m.model_dump()) for m in db_messages]
 
     def create_new_chat(self):
@@ -237,11 +194,6 @@ class ChatState(rx.State):
 
         async with self:
             prompt = self.input_text
-            conv_id = self.current_conversation_id
-            logger.info(f"[ChatState] Conversation ID: {conv_id}")
-            logger.info(f"[ChatState] User prompt: {prompt}")
-            logger.info(f"[ChatState] Current messages count: {len(self.messages)}")
-            logger.info(f"[ChatState] Is generating: {self.is_generating}")
 
             if not prompt.strip() or self.is_generating:
                 logger.warning(
@@ -250,15 +202,12 @@ class ChatState(rx.State):
                 return
 
         # Step 1: Save user message
-        logger.info("-" * 80)
         logger.info("[ChatState] STEP 1: Saving user message")
-        logger.info("-" * 80)
         user_msg_id = str(uuid4())
         async with self:
             self.input_text = ""
             self.is_generating = True
 
-            # Pure in-memory object
             user_msg = Message(
                 id=user_msg_id,
                 conversation_id=self.current_conversation_id,
@@ -267,22 +216,15 @@ class ChatState(rx.State):
                 avatar_url="https://i.pravatar.cc/150?img=11",
             )
 
-            # Save a COPY to the database
             with rx.session() as session:
                 session.add(Message(**user_msg.model_dump()))
                 session.commit()
-                logger.info(f"[ChatState] ✅ User message saved to DB: {user_msg_id}")
 
             self.messages.append(user_msg)
             self.messages = self.messages
-            logger.info(
-                f"[ChatState] ✅ User message added to UI state (total: {len(self.messages)})"
-            )
 
         # Step 2: Create AI message placeholder
-        logger.info("-" * 80)
         logger.info("[ChatState] STEP 2: Creating AI message placeholder")
-        logger.info("-" * 80)
         ai_msg_id = str(uuid4())
         async with self:
             ai_msg = Message(
@@ -293,57 +235,65 @@ class ChatState(rx.State):
             )
             self.messages.append(ai_msg)
             self.messages = self.messages
-            logger.info(f"[ChatState] ✅ AI placeholder created: {ai_msg_id}")
 
-        # Step 3: Stream LLM response
-        logger.info("-" * 80)
+        # Step 3: Stream LLM response (WITH WEBSOCKET BUFFERING)
         logger.info("[ChatState] STEP 3: Streaming LLM response")
-        logger.info("-" * 80)
-        logger.info("[ChatState] Creating LLM service...")
-        llm_service = self._get_llm_service()
-        logger.info(f"[ChatState] LLM service created: {type(llm_service).__name__}")
+
+        # ✅ ARCHITECTURE WIN: Resolve LLM Service from DI Container
+        try:
+            llm_service = AppContainer.resolve_llm_service()
+        except RuntimeError as e:
+            logger.error(f"[ChatState] DI Error: {e}")
+            async with self:
+                self.messages[-1].content = "Error: LLM Service not configured."
+                self.is_generating = False
+                self.messages = self.messages
+            yield
+            return
 
         use_case = SendMessageUseCase(llm_service)
         full_response = ""
-
-        # Pass history to Use Case (excluding the new user msg and empty AI placeholder)
         chat_history = self.messages[:-2]
-        logger.info(
-            f"[ChatState] Passing {len(chat_history)} history messages to use case"
-        )
-
         chunk_count = 0
-        async for chunk in use_case.execute(
-            conversation_id=self.current_conversation_id,
-            user_message=prompt,
-            history=chat_history,
-            config=LLMConfig(temperature=0.7),
-        ):
-            chunk_count += 1
-            full_response += chunk
+
+        try:
+            async for chunk in use_case.execute(
+                conversation_id=self.current_conversation_id,
+                user_message=prompt,
+                history=chat_history,
+                config=LLMConfig(temperature=0.7),
+            ):
+                chunk_count += 1
+                full_response += chunk
+
+                # ✅ ARCHITECTURE WIN: WebSocket Buffering (ADR 002-V2)
+                # Only update the UI state every 5 chunks to prevent browser freezing
+                if chunk_count % 5 == 0:
+                    async with self:
+                        self.messages[-1].content = full_response
+                        self.messages = self.messages
+                    # Yield pushes the state diff to the browser immediately
+                    yield
+
+            # Final flush to ensure the last few characters are rendered
             async with self:
-                # O(1) update: We know the AI message is the last one in the list
                 self.messages[-1].content = full_response
                 self.messages = self.messages
+            yield
 
-            if chunk_count == 1:
-                logger.info("[ChatState] ✅ First chunk received, UI updating...")
-            if chunk_count % 20 == 0:
-                logger.debug(
-                    f"[ChatState] Chunk #{chunk_count}, response length: {len(full_response)}"
-                )
-
-        logger.info(f"[ChatState] ✅ Streaming complete. Total chunks: {chunk_count}")
+        except Exception as e:
+            logger.error(f"[ChatState] Streaming Error: {e}")
+            async with self:
+                self.messages[
+                    -1
+                ].content += f"\n\n[Error generating response: {str(e)}]"
+                self.messages = self.messages
+            yield
 
         # Step 4: Save final AI message
-        logger.info("-" * 80)
         logger.info("[ChatState] STEP 4: Saving final AI message to database")
-        logger.info("-" * 80)
         async with self:
             with rx.session() as session:
-                # Save a COPY of the final AI message to the database
-                # CRITICAL FIX: Don't rely on .model_dump() - Reflex serialization breaks it
-                # Just reconstruct from the variables we already have
                 ai_msg_final = Message(
                     id=ai_msg_id,
                     conversation_id=self.current_conversation_id,
@@ -351,10 +301,6 @@ class ChatState(rx.State):
                     content=full_response,
                 )
                 session.add(ai_msg_final)
-                logger.info(f"[ChatState] ✅ AI message saved to DB: {ai_msg_id}")
-                logger.info(
-                    f"[ChatState] Response length: {len(full_response)} characters"
-                )
 
                 # Update conversation timestamp
                 conversation = (
@@ -364,17 +310,13 @@ class ChatState(rx.State):
                 )
                 if conversation:
                     conversation.updated_at = datetime.now(timezone.utc)
-                    logger.info("[ChatState] ✅ Conversation timestamp updated")
 
                 session.commit()
 
             self.is_generating = False
             self.messages = self.messages
-            logger.info("[ChatState] ✅ is_generating set to False")
 
-        logger.info("=" * 80)
         logger.info("[ChatState] ✅ HANDLE_SEND_MESSAGE COMPLETED SUCCESSFULLY")
-        logger.info("=" * 80)
 
     # ========================================================================
     # PLACEHOLDER METHODS (Future Implementation)

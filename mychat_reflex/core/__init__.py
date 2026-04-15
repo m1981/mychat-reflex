@@ -1,9 +1,11 @@
 """
-Core infrastructure module.
+Core Domain Module.
 
-This module contains shared infrastructure components:
-- database.py: Reflex database configuration and utilities
-- llm_ports.py: LLM service interfaces and adapters (ILLMService, AnthropicAdapter, etc.)
+This module contains pure business logic, interfaces (ports), and domain entities.
+Strictly NO infrastructure or framework dependencies (like Anthropic or OpenAI SDKs)
+are allowed here.
+
+Adapters have been moved to mychat_reflex.infrastructure.llm_adapters.
 """
 
 from .database import DatabaseConfig
@@ -11,17 +13,13 @@ from .llm_ports import (
     Role,
     LLMConfig,
     ILLMService,
-    AnthropicAdapter,
-    OpenAIAdapter,
 )
 
 __all__ = [
     # Database
     "DatabaseConfig",
-    # LLM
+    # LLM Ports (Interfaces & Domain Entities)
     "Role",
     "LLMConfig",
     "ILLMService",
-    "AnthropicAdapter",
-    "OpenAIAdapter",
 ]

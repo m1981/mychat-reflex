@@ -11,7 +11,8 @@ import pytest
 from pathlib import Path
 from dotenv import load_dotenv
 
-from mychat_reflex.core.llm_ports import AnthropicAdapter, LLMConfig
+from mychat_reflex.core.llm_ports import LLMConfig
+from mychat_reflex.infrastructure.llm_adapters import AnthropicAdapter
 from mychat_reflex.features.chat.use_cases import SendMessageUseCase
 from mychat_reflex.features.chat.models import Message
 
