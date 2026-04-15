@@ -2,15 +2,15 @@
 **Status:** Accepted (Replaces ADR 002)
 
 ### Context
-Streaming LLM responses (like ChatGPT) requires pushing text chunks to the UI in real-time. Previously, we planned to use Server-Sent Events (SSE) via FastAPI.
+Streaming LLM responses (like ChatGPT) requires pushing text chunks to the UI in real-time. Because we adopted the Full-Stack Monolith (ADR 011), we are using Reflex's native WebSocket reactivity instead of Server-Sent Events (SSE). However, yielding every single character from an LLM directly to `rx.State` can flood the WebSocket with hundreds of JSON diffs per second, causing the React frontend to freeze.
 
 ### Decision
-Because we adopted the Full-Stack Monolith (ADR 011), we will use **Reflex's native WebSocket reactivity**. The Use Case will yield raw text chunks using standard Python `async for` generators. The `rx.State` will append these chunks to the unified `rx.Model` and `yield`, allowing Reflex to automatically push the diff to the browser.
+We will use **Reflex's native WebSocket reactivity with Token Buffering**. The Use Case will yield raw text chunks. The `rx.State` (ViewModel) will accumulate these tokens in a buffer and only `yield` to update the UI every ~50 milliseconds or every 5-10 tokens.
 
 ### Consequences
-*   **Positive:** Zero network protocol coding required. No JSON serialization/deserialization for text chunks.
-*   **Positive:** UI updates are perfectly synchronized with the backend state.
-*   **Negative:** Reflex WebSockets can occasionally drop connections on unstable mobile networks compared to raw SSE, requiring robust error handling in the `rx.State`.
+*   **Positive:** Zero network protocol coding required (no manual SSE).
+*   **Positive:** UI updates remain perfectly synchronized with the backend state without locking the browser's main thread.
+*   **Negative:** Requires slightly more complex generator logic in the `rx.State` to manage the buffer.
 
 ## ADR 013: MVVM Pattern for Frontend Presentation
 **Status:** Accepted

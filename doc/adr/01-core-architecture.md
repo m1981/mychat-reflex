@@ -48,3 +48,18 @@ We will adopt **Hexagonal Architecture** (also known as Ports and Adapters) for 
 *   **Negative:** Introduces boilerplate. Developers must write Interfaces and map data between Infrastructure models (SQLAlchemy) and Domain models (Pydantic/Dataclasses).
 
 ---
+## ADR 015: Dependency Injection via Service Locator in Reflex State (NEW)
+**Status:** Accepted
+
+### Context
+Hexagonal Architecture (ADR 012) requires Dependency Injection (DI) so that Use Cases receive their Adapters (e.g., `ChromaDBAdapter`) from the outside. However, Reflex instantiates `rx.State` classes automatically under the hood. We cannot easily pass dependencies into the `__init__` method of a Reflex State. If we hardcode `use_case = SendMessageUseCase(OpenAIAdapter())` inside the State, we violate our architecture and make testing impossible.
+
+### Decision
+We will implement a lightweight **Service Locator / DI Container** pattern. A central registry (e.g., `AppContainer`) will be configured at application startup. Reflex `rx.State` classes will resolve their required Use Cases from this container during event handlers.
+
+### Consequences
+*   **Positive:** Preserves Hexagonal Architecture. The Reflex State remains decoupled from concrete Infrastructure adapters.
+*   **Positive:** Allows us to easily swap out the `AppContainer` configuration during testing to inject Fakes.
+*   **Negative:** Service Locator is sometimes considered an anti-pattern compared to pure constructor injection, but it is a necessary pragmatic compromise when working with framework-managed lifecycles like `rx.State`.
+
+***
