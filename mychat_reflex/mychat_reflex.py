@@ -1,23 +1,14 @@
-"""
-Super Chat - Advanced ChatGPT-like Application
-Built with Reflex Framework (2026)
-"""
-
+# mychat_reflex/mychat_reflex.py
 import logging
 import sys
 import reflex as rx
 
 from .pages.main import main_page
-from .features.chat.state import ChatState  # noqa: F401 - imported for state registration
-
-# ============================================================================
-# LOGGING CONFIGURATION - Make logs visible in console!
-# ============================================================================
 
 # Configure root logger
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    format="%(levelname)s - %(message)s",
     handlers=[
         logging.StreamHandler(sys.stdout)  # Output to console
     ],
