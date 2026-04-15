@@ -13,6 +13,7 @@ import reflex as rx
 from datetime import datetime, timezone
 from typing import Optional
 from uuid import uuid4
+import asyncio
 
 from mychat_reflex.core.di import AppContainer
 from mychat_reflex.core.llm_ports import LLMConfig
@@ -236,59 +237,47 @@ class ChatState(rx.State):
             self.messages.append(ai_msg)
             self.messages = self.messages
 
-        # Step 3: Stream LLM response (WITH WEBSOCKET BUFFERING)
+        # Step 3: Stream LLM response (WITH TYPEWRITER EFFECT)
+        logger.info("-" * 80)
         logger.info("[ChatState] STEP 3: Streaming LLM response")
+        logger.info("-" * 80)
 
-        # ✅ ARCHITECTURE WIN: Resolve LLM Service from DI Container
-        try:
-            llm_service = AppContainer.resolve_llm_service()
-        except RuntimeError as e:
-            logger.error(f"[ChatState] DI Error: {e}")
-            async with self:
-                self.messages[-1].content = "Error: LLM Service not configured."
-                self.is_generating = False
-                self.messages = self.messages
-            yield
-            return
-
+        llm_service = AppContainer.resolve_llm_service()
         use_case = SendMessageUseCase(llm_service)
+
         full_response = ""
         chat_history = self.messages[:-2]
-        chunk_count = 0
 
-        try:
-            async for chunk in use_case.execute(
-                conversation_id=self.current_conversation_id,
-                user_message=prompt,
-                history=chat_history,
-                config=LLMConfig(temperature=0.7),
-            ):
-                chunk_count += 1
-                full_response += chunk
+        async for chunk in use_case.execute(
+            conversation_id=self.current_conversation_id,
+            user_message=prompt,
+            history=chat_history,
+            config=LLMConfig(temperature=0.7),
+        ):
+            # Anthropic sometimes sends massive chunks (100+ chars).
+            # We break them down into smaller pieces for a smooth UI typewriter effect.
+            char_buffer = ""
 
-                # ✅ ARCHITECTURE WIN: WebSocket Buffering (ADR 002-V2)
-                # Only update the UI state every 5 chunks to prevent browser freezing
-                if chunk_count % 5 == 0:
+            for char in chunk:
+                char_buffer += char
+                full_response += char
+
+                # Update the UI every 12 characters (creates a smooth 60fps feel)
+                if len(char_buffer) >= 12:
                     async with self:
                         self.messages[-1].content = full_response
                         self.messages = self.messages
-                    # Yield pushes the state diff to the browser immediately
-                    yield
+                    yield  # Push to browser
+                    await asyncio.sleep(0.01)  # Micro-delay for typewriter effect
+                    char_buffer = ""  # Reset buffer
 
-            # Final flush to ensure the last few characters are rendered
-            async with self:
-                self.messages[-1].content = full_response
-                self.messages = self.messages
-            yield
-
-        except Exception as e:
-            logger.error(f"[ChatState] Streaming Error: {e}")
-            async with self:
-                self.messages[
-                    -1
-                ].content += f"\n\n[Error generating response: {str(e)}]"
-                self.messages = self.messages
-            yield
+            # Flush any remaining characters in the chunk
+            if char_buffer:
+                async with self:
+                    self.messages[-1].content = full_response
+                    self.messages = self.messages
+                yield
+                await asyncio.sleep(0.01)
 
         # Step 4: Save final AI message
         logger.info("[ChatState] STEP 4: Saving final AI message to database")
