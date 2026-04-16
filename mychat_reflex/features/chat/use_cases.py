@@ -10,7 +10,7 @@ Architectural Rules Applied:
 
 import logging
 from typing import AsyncGenerator, List, Optional
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from mychat_reflex.core.llm_ports import ILLMService, LLMConfig
 from .models import Message
@@ -101,28 +101,14 @@ class LoadHistoryUseCase:
     """Load conversation history from database."""
 
     async def execute(self, session: Session, conversation_id: str) -> List[Message]:
-        """
-        Execute the query to load history.
-
-        Args:
-            session: An active database session (injected by the caller)
-            conversation_id: The ID of the conversation to load
-
-        Returns:
-            List of Message objects
-        """
         logger.info(f"[LoadHistoryUseCase] Loading history for: {conversation_id}")
 
-        messages = (
-            session.query(Message)
-            .filter(Message.conversation_id == conversation_id)
+        # FIX: Use modern SQLModel select() syntax
+        statement = (
+            select(Message)
+            .where(Message.conversation_id == conversation_id)
             .order_by(Message.created_at)
-            .all()
         )
 
-        # Detach objects from the session before returning them.
-        # This prevents DetachedInstanceError crashes in the UI layer.
-        session.expunge_all()
-
-        logger.info(f"[LoadHistoryUseCase] Loaded {len(messages)} messages")
-        return messages
+        messages = session.exec(statement).all()
+        return list(messages)
