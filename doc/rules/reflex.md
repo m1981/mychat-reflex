@@ -115,8 +115,8 @@ class SearchState(rx.State):
 def search_bar():
     return rx.input(
         placeholder="Search...",
-        # Wait 300ms after the user STOPS typing before sending the WS event
-        on_change=rx.debounce(SearchState.run_search, debounce_timeout=300)
+        on_change=SearchState.run_search,
+        debounce_timeout=300  # Native Reflex prop! Much cleaner.
     )
 ```
 
