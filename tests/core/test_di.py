@@ -31,3 +31,17 @@ def test_di_container_registers_and_resolves():
     resolved = AppContainer.resolve_llm_service()
 
     assert resolved is dummy  # Must be the exact same instance
+
+
+def test_di_container_clear():
+    """Test that clear() removes the registered service."""
+    dummy = DummyService()
+    AppContainer.register_llm_service(dummy)
+
+    # Act
+    AppContainer.clear()
+
+    # Assert
+    with pytest.raises(RuntimeError) as exc_info:
+        AppContainer.resolve_llm_service()
+    assert "LLM Service not initialized" in str(exc_info.value)
