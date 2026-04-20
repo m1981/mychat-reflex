@@ -89,18 +89,11 @@ def message_bubble(message: Message) -> rx.Component:
                 message_actions(message.id),
                 class_name="flex items-center justify-between mb-1",
             ),
-            # Message content - split by newlines for multiple paragraphs
+            # Message content rendered as Markdown with syntax highlighting
             rx.box(
-                rx.foreach(
-                    message.content.split("\n"),
-                    lambda para: rx.cond(
-                        para.strip() != "",
-                        rx.text(
-                            para,
-                            class_name="text-gray-700 leading-relaxed mb-2",
-                        ),
-                        rx.box(),  # Empty box for blank lines
-                    ),
+                rx.markdown(
+                    message.content,
+                    class_name="prose max-w-none text-gray-700 leading-relaxed",
                 ),
             ),
             class_name="flex-1",
