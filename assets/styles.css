@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Open+Sans:ital,wght@0,300..800;1,300..800&family=Source+Code+Pro:ital,wght@0,200..900;1,200..900&display=swap');
+
 /* Custom scrollbar for a cleaner look */
 ::-webkit-scrollbar {
     width: 6px;
@@ -20,4 +22,13 @@
 * {
     scrollbar-width: thin;
     scrollbar-color: #cbd5e1 transparent;
+}
+
+
+body, *:not(code):not(pre):not(kbd):not(samp) {
+    font-family: 'Open Sans', ui-sans-serif, system-ui, sans-serif !important;
+}
+
+code, pre, kbd, samp, code *, pre * {
+    font-family: 'Source Code Pro', ui-monospace, monospace !important;
 }

@@ -71,11 +71,14 @@ def index() -> rx.Component:
 
 
 app = rx.App(
-    style={
-        "font_family": "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-    },
+    theme=rx.theme(
+        appearance="light",
+        has_background=True,
+        radius="large",
+        accent_color="indigo",
+    ),
     stylesheets=[
-        "/styles.css",  # Custom scrollbar styles
+        "/styles.css",
     ],
 )
 app.add_page(index, title="Super Chat 2")
