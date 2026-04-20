@@ -94,6 +94,23 @@ def message_bubble(message: Message) -> rx.Component:
                 rx.markdown(
                     message.content,
                     class_name="prose max-w-none text-gray-700 leading-relaxed",
+                    component_map={
+                        "code": lambda text, **props: rx.code_block(
+                            text,
+                            language=props.get("className", "text").replace(
+                                "language-", ""
+                            )
+                            or "text",
+                            theme="one-dark",
+                            show_line_numbers=False,
+                            wrap_long_lines=True,
+                            width="100%",
+                        )
+                        if props.get("className")
+                        else rx.code(
+                            text, style={"font_family": "Source Code Pro, monospace"}
+                        ),
+                    },
                 ),
             ),
             class_name="flex-1",

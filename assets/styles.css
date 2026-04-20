@@ -25,7 +25,7 @@
 }
 
 
-body, *:not(code):not(pre):not(kbd):not(samp) {
+body, * {
     font-family: 'Open Sans', ui-sans-serif, system-ui, sans-serif !important;
 }
 
