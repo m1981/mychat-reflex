@@ -1,9 +1,15 @@
 # mychat_reflex/mychat_reflex.py
 import logging
 import sys
+import os
 import reflex as rx
+from dotenv import load_dotenv  # 1. ADD THIS IMPORT
 
 from .pages.main import main_page
+
+# 1. ADD THESE IMPORTS FOR DEPENDENCY INJECTION
+from .core.di import AppContainer
+from .infrastructure.llm_adapters import AnthropicAdapter
 
 # Configure root logger
 logging.basicConfig(
@@ -29,6 +35,36 @@ print("🔥 LOGGING ENABLED - You will see detailed API request logs in this con
 print("=" * 80)
 
 
+# ============================================================================
+# 2. ADD THE COMPOSITION ROOT (Dependency Injection Wiring)
+# ============================================================================
+def initialize_dependencies():
+    """Wire up the application dependencies before starting."""
+
+    # 2. EXPLICITLY LOAD THE .env FILE
+    load_dotenv()
+    logging.info("✅ Loaded environment variables from .env file.")
+
+    api_key = os.getenv("ANTHROPIC_API_KEY", "")
+
+    if not api_key:
+        logging.error("❌ ANTHROPIC_API_KEY is missing from environment variables!")
+
+    # Instantiate the concrete adapter
+    anthropic_adapter = AnthropicAdapter(api_key=api_key, model="claude-sonnet-4-5")
+
+    # Register it with the Service Locator
+    AppContainer.register_llm_service(anthropic_adapter)
+    logging.info("✅ Dependencies initialized and registered in AppContainer.")
+
+
+# 3. RUN THE INITIALIZATION
+initialize_dependencies()
+
+
+# ============================================================================
+# REFLEX APP SETUP
+# ============================================================================
 def index() -> rx.Component:
     """Main application entry point."""
     return main_page()

@@ -85,7 +85,7 @@ def mock_openai_client():
 @pytest.mark.asyncio
 async def test_anthropic_adapter_standard_request(mock_anthropic_client):
     """Test that standard config maps to the correct Anthropic kwargs."""
-    adapter = AnthropicAdapter(api_key="fake", model="claude-sonnet-4.5")
+    adapter = AnthropicAdapter(api_key="fake", model="claude-sonnet-4-5")
     config = LLMConfig(temperature=0.5, enable_reasoning=False)
 
     # ACT: Consume the stream
@@ -98,7 +98,7 @@ async def test_anthropic_adapter_standard_request(mock_anthropic_client):
     mock_anthropic_client.messages.stream.assert_called_once()
     call_kwargs = mock_anthropic_client.messages.stream.call_args.kwargs
 
-    assert call_kwargs["model"] == "claude-sonnet-4.5"
+    assert call_kwargs["model"] == "claude-sonnet-4-5"
     assert call_kwargs["temperature"] == 0.5
     assert call_kwargs["messages"] == [{"role": "user", "content": "Hello"}]
     assert "thinking" not in call_kwargs
@@ -107,7 +107,7 @@ async def test_anthropic_adapter_standard_request(mock_anthropic_client):
 @pytest.mark.asyncio
 async def test_anthropic_adapter_reasoning_request(mock_anthropic_client):
     """Test that enable_reasoning injects the thinking block correctly."""
-    adapter = AnthropicAdapter(api_key="fake", model="claude-sonnet-4.5")
+    adapter = AnthropicAdapter(api_key="fake", model="claude-sonnet-4-5")
     config = LLMConfig(enable_reasoning=True, reasoning_budget=4000)
 
     # ACT

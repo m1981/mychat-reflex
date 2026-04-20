@@ -24,7 +24,7 @@ class AnthropicAdapter(ILLMService):
     Simplified for Reflex monolith - string-only prompts.
     """
 
-    def __init__(self, api_key: str, model: str = "claude-sonnet-4.5"):
+    def __init__(self, api_key: str, model: str = "claude-sonnet-4-5"):
         """
         Initialize Anthropic adapter.
         """
