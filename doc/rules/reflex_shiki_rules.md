@@ -176,3 +176,49 @@ rx.toggle_color_mode            # event handler for manual wiring
 ```
 
 **Rule:** Place `rx.color_mode.button()` anywhere in the layout. It renders as a moon/sun icon and requires no additional state.
+
+---
+
+## 9. Streaming + Shiki: jiggling and partial-language errors
+
+**Problem:** During LLM streaming, every chunk triggers `useEffect([..., code, language, ...])` in Shiki's `code.js`. This causes:
+- **Flicker/jiggling** — async `codeToHtml` → blank → rendered → blank... on every character
+- **ShikiError: Language `docke` not included** — partial language names are sent while the LLM streams ` ```dockerfile` character by character
+
+**Fix:** Modify `.web/components/shiki/code.js` (Reflex places this file once; it is not regenerated on each run):
+
+```javascript
+import { useEffect, useState, useRef, createElement } from "react";
+import { codeToHtml } from "shiki";
+
+export function Code({ code, theme, language, transformers, decorations, ...divProps }) {
+  const [codeResult, setCodeResult] = useState("");
+  const debounceRef = useRef(null);
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const result = await codeToHtml(code, { lang: language || "text", theme, transformers, decorations });
+        setCodeResult(result);
+      } catch (_) {
+        try {
+          const result = await codeToHtml(code, { lang: "text", theme });
+          setCodeResult(result);
+        } catch (_2) {
+          setCodeResult(`<pre><code>${code}</code></pre>`);
+        }
+      }
+    }, 150);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [code, language, theme, transformers, decorations]);
+
+  return createElement("div", { dangerouslySetInnerHTML: { __html: codeResult }, ...divProps });
+}
+```
+
+**Rules:**
+- 150ms debounce suppresses rerenders during rapid streaming; adjust if needed
+- `language || "text"` guards against empty/undefined language
+- The outer try-catch retries with `"text"` on any Shiki language error
+- This file lives at `.web/components/shiki/code.js` — re-apply if `.web/` is deleted or Reflex is upgraded
