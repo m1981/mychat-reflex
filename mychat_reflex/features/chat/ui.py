@@ -15,6 +15,26 @@ from .models import Message
 
 
 # ============================================================================
+# HELPERS
+# ============================================================================
+
+
+def _code_block(text, **props):
+    """Render a code block with the current theme. Used in rx.markdown component_map.
+    Language is omitted when unknown — rx.code_block language prop is a strict Literal type."""
+    lang = props.get("className", "").replace("language-", "")
+    extra = {"language": lang} if lang else {}
+    return rx.code_block(
+        text,
+        **extra,
+        theme=ChatState.code_theme,
+        show_line_numbers=False,
+        wrap_long_lines=True,
+        width="100%",
+    )
+
+
+# ============================================================================
 # MESSAGE BUBBLE COMPONENTS
 # ============================================================================
 
@@ -94,23 +114,7 @@ def message_bubble(message: Message) -> rx.Component:
                 rx.markdown(
                     message.content,
                     class_name="prose max-w-none text-gray-700 leading-relaxed",
-                    component_map={
-                        "code": lambda text, **props: rx.code_block(
-                            text,
-                            language=props.get("className", "text").replace(
-                                "language-", ""
-                            )
-                            or "text",
-                            theme="one-dark",
-                            show_line_numbers=False,
-                            wrap_long_lines=True,
-                            width="100%",
-                        )
-                        if props.get("className")
-                        else rx.code(
-                            text, style={"font_family": "Source Code Pro, monospace"}
-                        ),
-                    },
+                    component_map={"code": _code_block},
                 ),
             ),
             class_name="flex-1",
@@ -235,8 +239,25 @@ def chat_header() -> rx.Component:
             ),
             class_name="flex items-center gap-3",
         ),
-        # Right side: action buttons
+        # Right side: action buttons + theme picker
         rx.box(
+            rx.select(
+                [
+                    "one-dark",
+                    "atom-dark",
+                    "dracula",
+                    "nord",
+                    "night-owl",
+                    "vs-dark",
+                    "solarized-dark",
+                    "material-oceanic",
+                ],
+                value=ChatState.code_theme,
+                on_change=ChatState.set_code_theme,
+                placeholder="Code theme",
+                size="1",
+                class_name="text-xs",
+            ),
             rx.button(
                 rx.icon("boxes", size=16),
                 class_name="hover:text-gray-800 cursor-pointer",
