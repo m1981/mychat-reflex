@@ -72,11 +72,20 @@ def user_avatar(avatar_url: Optional[str]) -> rx.Component:
         rx.image(
             src=avatar_url,
             alt="User",
-            class_name="w-8 h-8 rounded-full border border-gray-300",
+            class_name=[
+                "w-8 h-8 rounded-full border",
+                rx.color_mode_cond("border-gray-300", "border-gray-600"),
+            ],
         ),
         rx.box(
             rx.icon("user", size=16),
-            class_name="w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center border border-gray-300",
+            class_name=[
+                "w-8 h-8 rounded-full flex items-center justify-center border",
+                rx.color_mode_cond(
+                    "bg-gray-100 text-gray-500 border-gray-300",
+                    "bg-gray-700 text-gray-400 border-gray-600",
+                ),
+            ],
         ),
     )
 
@@ -103,8 +112,11 @@ def message_bubble(message: Message) -> rx.Component:
             # Header with timestamp and actions
             rx.box(
                 rx.text(
-                    message.timestamp_formatted,  # ARCHITECT FIX: Updated to match new rx.Model
-                    class_name="text-xs text-gray-400 font-medium",
+                    message.timestamp_formatted,
+                    class_name=[
+                        "text-xs font-medium",
+                        rx.color_mode_cond("text-gray-400", "text-gray-500"),
+                    ],
                 ),
                 message_actions(message.id),
                 class_name="flex items-center justify-between mb-1",
@@ -113,7 +125,10 @@ def message_bubble(message: Message) -> rx.Component:
             rx.box(
                 rx.markdown(
                     message.content,
-                    class_name="prose max-w-none text-gray-700 leading-relaxed",
+                    class_name=[
+                        "prose max-w-none leading-relaxed",
+                        rx.color_mode_cond("text-gray-700", "text-gray-200"),
+                    ],
                     component_map={"code": _code_block},
                 ),
             ),
@@ -184,17 +199,31 @@ def chat_input() -> rx.Component:
                 value=ChatState.input_text,
                 on_change=ChatState.set_input_text,
                 rows="2",
-                class_name="w-full resize-none outline-none text-gray-700 placeholder-gray-400 bg-transparent border-0",
+                class_name=[
+                    "w-full resize-none outline-none bg-transparent border-0",
+                    rx.color_mode_cond(
+                        "text-gray-700 placeholder-gray-400",
+                        "text-gray-200 placeholder-gray-500",
+                    ),
+                ],
             ),
             # Toolbar
             rx.box(
                 input_tools_left(),
                 input_tools_right(),
-                class_name="flex justify-between items-center mt-3 pt-2 border-t border-gray-100",
+                class_name=[
+                    "flex justify-between items-center mt-3 pt-2 border-t",
+                    rx.color_mode_cond("border-gray-100", "border-gray-700"),
+                ],
             ),
-            class_name="max-w-4xl mx-auto border border-gray-300 rounded-2xl p-4 shadow-sm focus-within:border-blue-400 focus-within:ring-1 focus-within:ring-blue-400 transition-all",
+            class_name=[
+                "max-w-4xl mx-auto rounded-2xl p-4 shadow-sm border focus-within:border-blue-400 focus-within:ring-1 focus-within:ring-blue-400 transition-all",
+                rx.color_mode_cond(
+                    "border-gray-300 bg-white", "border-gray-700 bg-gray-800"
+                ),
+            ],
         ),
-        class_name="p-6 bg-white",
+        class_name=["p-6", rx.color_mode_cond("bg-white", "bg-gray-900")],
     )
 
 
@@ -216,11 +245,20 @@ def global_search() -> rx.Component:
                 placeholder="Search",
                 value=ChatState.sidebar_search,
                 on_change=ChatState.set_sidebar_search,
-                class_name="w-full border border-gray-400 rounded-full py-2 pl-10 pr-4 focus:outline-none focus:border-blue-500",
+                class_name=[
+                    "w-full rounded-full py-2 pl-10 pr-4 border focus:outline-none focus:border-blue-500",
+                    rx.color_mode_cond(
+                        "border-gray-400 bg-white text-gray-800",
+                        "border-gray-600 bg-gray-800 text-gray-100 placeholder-gray-500",
+                    ),
+                ],
             ),
             class_name="relative w-full max-w-2xl",
         ),
-        class_name="p-4 border-b border-gray-300 flex justify-center",
+        class_name=[
+            "p-4 border-b flex justify-center",
+            rx.color_mode_cond("border-gray-300", "border-gray-700"),
+        ],
     )
 
 
@@ -231,7 +269,10 @@ def chat_header() -> rx.Component:
         rx.box(
             rx.heading(
                 ChatState.current_chat_title,
-                class_name="text-lg font-semibold text-gray-800",
+                class_name=[
+                    "text-lg font-semibold",
+                    rx.color_mode_cond("text-gray-800", "text-gray-100"),
+                ],
             ),
             rx.button(
                 rx.icon("pencil", size=14),
@@ -276,7 +317,10 @@ def chat_header() -> rx.Component:
             ),
             class_name="flex items-center gap-4 text-gray-500",
         ),
-        class_name="px-8 py-4 border-b border-gray-300 flex justify-between items-center",
+        class_name=[
+            "px-8 py-4 border-b flex justify-between items-center",
+            rx.color_mode_cond("border-gray-300", "border-gray-700"),
+        ],
     )
 
 
@@ -298,5 +342,8 @@ def chat_area() -> rx.Component:
         chat_header(),
         chat_history(),
         chat_input(),
-        class_name="flex-1 flex flex-col h-full relative min-w-0 bg-white",
+        class_name=[
+            "flex-1 flex flex-col h-full relative min-w-0",
+            rx.color_mode_cond("bg-white", "bg-gray-900"),
+        ],
     )

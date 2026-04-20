@@ -18,9 +18,15 @@ def sidebar_header() -> rx.Component:
     return rx.box(
         rx.heading(
             "Super Chat",
-            class_name="text-2xl font-bold text-gray-800 tracking-wide",
+            class_name=[
+                "text-2xl font-bold tracking-wide",
+                rx.color_mode_cond("text-gray-800", "text-gray-100"),
+            ],
         ),
-        class_name="p-5 border-b border-gray-300",
+        class_name=[
+            "p-5 border-b",
+            rx.color_mode_cond("border-gray-300", "border-gray-700"),
+        ],
     )
 
 
@@ -49,7 +55,13 @@ def sidebar_search() -> rx.Component:
                 placeholder="Search",
                 value=ChatState.sidebar_search,
                 on_change=ChatState.set_sidebar_search,
-                class_name="w-full border border-gray-400 rounded-md py-1.5 px-3 text-sm focus:outline-none focus:border-blue-500",
+                class_name=[
+                    "w-full rounded-md py-1.5 px-3 text-sm border focus:outline-none focus:border-blue-500",
+                    rx.color_mode_cond(
+                        "border-gray-400 bg-white text-gray-800",
+                        "border-gray-600 bg-gray-800 text-gray-100 placeholder-gray-500",
+                    ),
+                ],
             ),
             class_name="relative",
         ),
@@ -75,7 +87,10 @@ def folder_section(folder_name: str, chats: list[tuple[str, str]]) -> rx.Compone
         ),
         rx.el.ul(
             *[chat_item(chat_id, chat_title) for chat_id, chat_title in chats],
-            class_name="ml-4 space-y-2 text-sm text-gray-700 font-medium",
+            class_name=[
+                "ml-4 space-y-2 text-sm font-medium",
+                rx.color_mode_cond("text-gray-700", "text-gray-300"),
+            ],
         ),
     )
 
@@ -106,19 +121,38 @@ def navigation_list() -> rx.Component:
 def sidebar_footer() -> rx.Component:
     """Settings and profile section."""
     return rx.box(
+        rx.color_mode.button(size="2", cursor="pointer"),
         rx.button(
             rx.icon("settings", class_name="text-lg"),
             rx.text("Settings"),
-            class_name="flex items-center gap-3 text-gray-700 hover:text-black font-medium w-full cursor-pointer",
+            class_name=[
+                "flex items-center gap-3 font-medium w-full cursor-pointer",
+                rx.color_mode_cond(
+                    "text-gray-700 hover:text-black", "text-gray-300 hover:text-white"
+                ),
+            ],
         ),
         rx.button(
             rx.box(
-                class_name="w-6 h-6 rounded-full border border-gray-400 flex items-center justify-center bg-gray-100",
+                class_name=[
+                    "w-6 h-6 rounded-full border flex items-center justify-center",
+                    rx.color_mode_cond(
+                        "border-gray-400 bg-gray-100", "border-gray-600 bg-gray-700"
+                    ),
+                ],
             ),
             rx.text("Michal"),
-            class_name="flex items-center gap-3 text-gray-700 hover:text-black font-medium w-full cursor-pointer",
+            class_name=[
+                "flex items-center gap-3 font-medium w-full cursor-pointer",
+                rx.color_mode_cond(
+                    "text-gray-700 hover:text-black", "text-gray-300 hover:text-white"
+                ),
+            ],
         ),
-        class_name="p-4 border-t border-gray-300 space-y-4",
+        class_name=[
+            "p-4 border-t space-y-4",
+            rx.color_mode_cond("border-gray-300", "border-gray-700"),
+        ],
     )
 
 
@@ -130,5 +164,10 @@ def sidebar() -> rx.Component:
         sidebar_search(),
         navigation_list(),
         sidebar_footer(),
-        class_name="w-64 flex-shrink-0 border-r border-gray-300 flex flex-col h-full bg-white",
+        class_name=[
+            "w-64 flex-shrink-0 border-r flex flex-col h-full",
+            rx.color_mode_cond(
+                "border-gray-300 bg-white", "border-gray-700 bg-gray-900"
+            ),
+        ],
     )
