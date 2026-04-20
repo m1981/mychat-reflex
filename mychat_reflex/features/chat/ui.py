@@ -9,6 +9,7 @@ Contains all UI elements for the chat bounded context:
 
 import reflex as rx
 from typing import Optional
+from reflex.components.datadisplay.shiki_code_block import ShikiHighLevelCodeBlock
 
 from .state import ChatState
 from .models import Message
@@ -20,14 +21,17 @@ from .models import Message
 
 
 def _code_block(text, **props):
-    """Render a code block with the current theme. Used in rx.markdown component_map.
-    Language is omitted when unknown — rx.code_block language prop is a strict Literal type."""
-    lang = props.get("className", "").replace("language-", "")
-    extra = {"language": lang} if lang else {}
-    return rx.code_block(
+    """Render a code block with the current theme.
+    Uses ShikiHighLevelCodeBlock (same as rx.markdown's default renderer) so it
+    accepts a dynamic Var for both language and theme.
+    Registered under "pre" — Reflex routes fenced code blocks through "pre"."""
+    language = props.get(
+        "language"
+    )  # Var[str] at runtime; None during mock compilation
+    return ShikiHighLevelCodeBlock.create(
         text,
-        **extra,
-        theme=ChatState.code_theme,
+        language=language,
+        theme=rx.color_mode_cond(ChatState.light_code_theme, ChatState.code_theme),
         show_line_numbers=False,
         wrap_long_lines=True,
         width="100%",
@@ -129,7 +133,7 @@ def message_bubble(message: Message) -> rx.Component:
                         "prose max-w-none leading-relaxed",
                         rx.color_mode_cond("text-gray-700", "text-gray-200"),
                     ],
-                    component_map={"code": _code_block},
+                    component_map={"pre": _code_block},
                 ),
             ),
             class_name="flex-1",
@@ -282,22 +286,45 @@ def chat_header() -> rx.Component:
         ),
         # Right side: action buttons + theme picker
         rx.box(
-            rx.select(
-                [
-                    "one-dark",
-                    "atom-dark",
-                    "dracula",
-                    "nord",
-                    "night-owl",
-                    "vs-dark",
-                    "solarized-dark",
-                    "material-oceanic",
-                ],
-                value=ChatState.code_theme,
-                on_change=ChatState.set_code_theme,
-                placeholder="Code theme",
-                size="1",
-                class_name="text-xs",
+            rx.color_mode_cond(
+                rx.select(
+                    [
+                        "github-light",
+                        "github-light-default",
+                        "one-light",
+                        "light-plus",
+                        "min-light",
+                        "solarized-light",
+                        "catppuccin-latte",
+                        "vitesse-light",
+                        "snazzy-light",
+                    ],
+                    value=ChatState.light_code_theme,
+                    on_change=ChatState.set_light_code_theme,
+                    placeholder="Light code theme",
+                    size="1",
+                    class_name="text-xs",
+                ),
+                rx.select(
+                    [
+                        "nord",
+                        "one-dark-pro",
+                        "dracula",
+                        "night-owl",
+                        "dark-plus",
+                        "github-dark",
+                        "github-dark-default",
+                        "material-theme-ocean",
+                        "tokyo-night",
+                        "catppuccin-mocha",
+                        "ayu-dark",
+                    ],
+                    value=ChatState.code_theme,
+                    on_change=ChatState.set_code_theme,
+                    placeholder="Dark code theme",
+                    size="1",
+                    class_name="text-xs",
+                ),
             ),
             rx.button(
                 rx.icon("boxes", size=16),

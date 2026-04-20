@@ -61,10 +61,14 @@ class ChatState(rx.State):
 
     # UI preferences
     selected_model: str = "Claude Sonnet 4.5"
-    code_theme: str = rx.LocalStorage("nord", name="code_theme")
+    code_theme: str = rx.LocalStorage("nord", name="code_theme_v2")
+    light_code_theme: str = rx.LocalStorage("github-light", name="light_code_theme_v2")
 
     def set_code_theme(self, theme: str):
         self.code_theme = theme
+
+    def set_light_code_theme(self, theme: str):
+        self.light_code_theme = theme
 
     # ========================================================================
     # COMPUTED PROPERTIES
