@@ -102,8 +102,13 @@ def ai_avatar() -> rx.Component:
     )
 
 
-def message_bubble(message: Message) -> rx.Component:
+def message_bubble(message: Message, index: int) -> rx.Component:
     """A single message bubble (user or AI)."""
+    is_streaming_ai_last = (
+        ChatState.is_generating
+        & (~message.is_user)
+        & (index == (ChatState.messages.length() - 1))
+    )
     return rx.box(
         # Avatar
         rx.cond(
@@ -125,15 +130,26 @@ def message_bubble(message: Message) -> rx.Component:
                 message_actions(message.id),
                 class_name="flex items-center justify-between mb-1",
             ),
-            # Message content rendered as Markdown with syntax highlighting
+            # Message content: plain text while last AI message is streaming;
+            # markdown (with Shiki code blocks) once complete.
             rx.box(
-                rx.markdown(
-                    message.content,
-                    class_name=[
-                        "prose max-w-none leading-relaxed",
-                        rx.color_mode_cond("text-gray-700", "text-gray-200"),
-                    ],
-                    component_map={"pre": _code_block},
+                rx.cond(
+                    is_streaming_ai_last,
+                    rx.el.pre(
+                        message.content,
+                        class_name=[
+                            "whitespace-pre-wrap break-words leading-relaxed font-sans text-sm",
+                            rx.color_mode_cond("text-gray-700", "text-gray-200"),
+                        ],
+                    ),
+                    rx.markdown(
+                        message.content,
+                        class_name=[
+                            "prose max-w-none leading-relaxed",
+                            rx.color_mode_cond("text-gray-700", "text-gray-200"),
+                        ],
+                        component_map={"pre": _code_block},
+                    ),
                 ),
             ),
             class_name="flex-1",
@@ -356,7 +372,7 @@ def chat_history() -> rx.Component:
     return rx.box(
         rx.foreach(
             ChatState.messages,
-            message_bubble,
+            lambda message, index: message_bubble(message, index),
         ),
         class_name="flex-1 overflow-y-auto p-8 space-y-8",
     )
