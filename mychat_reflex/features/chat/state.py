@@ -23,6 +23,12 @@ from .use_cases import SendMessageUseCase, LoadHistoryUseCase
 logger = logging.getLogger(__name__)
 
 
+def _close_open_code_block(content: str) -> str:
+    """Append a closing ``` when content has an unclosed fenced code block.
+    Prevents react-markdown from parsing # comments as headings mid-stream."""
+    return content + "\n```" if content.count("```") % 2 == 1 else content
+
+
 # ============================================================================
 # CHAT STATE (UI CONTROLLER)
 # ============================================================================
@@ -262,27 +268,25 @@ class ChatState(rx.State):
             history=chat_history,
             config=LLMConfig(temperature=0.7),
         ):
-            # Anthropic sometimes sends massive chunks (100+ chars).
-            # We break them down into smaller pieces for a smooth UI typewriter effect.
             char_buffer = ""
 
             for char in chunk:
                 char_buffer += char
                 full_response += char
 
-                # Update the UI every 12 characters (creates a smooth 60fps feel)
                 if len(char_buffer) >= 12:
                     async with self:
-                        self.messages[-1].content = full_response
+                        self.messages[-1].content = _close_open_code_block(
+                            full_response
+                        )
                         self.messages = self.messages
-                    yield  # Push to browser
-                    await asyncio.sleep(0.01)  # Micro-delay for typewriter effect
-                    char_buffer = ""  # Reset buffer
+                    yield
+                    await asyncio.sleep(0.01)
+                    char_buffer = ""
 
-            # Flush any remaining characters in the chunk
             if char_buffer:
                 async with self:
-                    self.messages[-1].content = full_response
+                    self.messages[-1].content = _close_open_code_block(full_response)
                     self.messages = self.messages
                 yield
                 await asyncio.sleep(0.01)
@@ -299,7 +303,6 @@ class ChatState(rx.State):
                 )
                 session.add(ai_msg_final)
 
-                # Update conversation timestamp
                 conversation = (
                     session.query(Conversation)
                     .filter(Conversation.id == self.current_conversation_id)
@@ -310,6 +313,8 @@ class ChatState(rx.State):
 
                 session.commit()
 
+            # Restore clean content (no appended ```) now that streaming is complete
+            self.messages[-1].content = full_response
             self.is_generating = False
             self.messages = self.messages
 
