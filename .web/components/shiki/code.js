@@ -20,9 +20,12 @@ export function Code({
 }) {
   const [codeResult, setCodeResult] = useState("");
   const debounceRef = useRef(null);
+  const reqIdRef = useRef(0);
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    const reqId = ++reqIdRef.current;
 
     debounceRef.current = setTimeout(async () => {
       const safeLang = language || "text";
@@ -33,14 +36,20 @@ export function Code({
           transformers,
           decorations,
         });
-        setCodeResult(result);
+        if (reqId === reqIdRef.current) {
+          setCodeResult(result);
+        }
       } catch (_) {
         // Partial or unknown language name — fall back to plain text highlighting
         try {
           const result = await codeToHtml(code, { lang: "text", theme });
-          setCodeResult(result);
+          if (reqId === reqIdRef.current) {
+            setCodeResult(result);
+          }
         } catch (_2) {
-          setCodeResult(`<pre><code>${code}</code></pre>`);
+          if (reqId === reqIdRef.current) {
+            setCodeResult(`<pre><code>${code}</code></pre>`);
+          }
         }
       }
     }, 150);
@@ -52,6 +61,11 @@ export function Code({
 
   return createElement("div", {
     dangerouslySetInnerHTML: { __html: codeResult },
+    style: {
+      minHeight: "1.5em",
+      transition: "opacity 120ms ease",
+      ...(divProps.style || {}),
+    },
     ...divProps,
   });
 }
