@@ -20,21 +20,71 @@ from .models import Message
 # ============================================================================
 
 
+LIGHT_CODE_THEMES = (
+    "github-light",
+    "github-light-default",
+    "one-light",
+    "light-plus",
+    "min-light",
+    "solarized-light",
+    "catppuccin-latte",
+    "vitesse-light",
+    "snazzy-light",
+)
+
+DARK_CODE_THEMES = (
+    "nord",
+    "one-dark-pro",
+    "dracula",
+    "night-owl",
+    "dark-plus",
+    "github-dark",
+    "github-dark-default",
+    "material-theme-ocean",
+    "tokyo-night",
+    "catppuccin-mocha",
+    "ayu-dark",
+)
+
+
+DYNAMIC_CODE_THEME_CONFIG = {
+    "mode": "dynamic-local-storage",
+    "light_storage_key": "light_code_theme_v2",
+    "dark_storage_key": "code_theme_v2",
+    "light_default": "github-light",
+    "dark_default": "nord",
+}
+
+
 def _code_block(text, **props):
-    """Render a code block with the current theme.
-    Uses ShikiHighLevelCodeBlock (same as rx.markdown's default renderer) so it
-    accepts a dynamic Var for both language and theme.
-    Registered under "pre" — Reflex routes fenced code blocks through "pre"."""
+    """Render fenced code with a hook-free callback.
+
+    The actual Shiki theme is resolved inside the custom React component from
+    color mode + localStorage so this callback never touches Reflex state.
+    """
     language = props.get(
         "language"
     )  # Var[str] at runtime; None during mock compilation
     return ShikiHighLevelCodeBlock.create(
         text,
         language=language,
-        theme=rx.color_mode_cond(ChatState.light_code_theme, ChatState.code_theme),
+        theme="nord",
+        themes=DYNAMIC_CODE_THEME_CONFIG,
         show_line_numbers=False,
         wrap_long_lines=True,
         width="100%",
+    )
+
+
+def _message_markdown(content) -> rx.Component:
+    """Render markdown while keeping the code-block renderer hook-safe."""
+    return rx.markdown(
+        content,
+        class_name=[
+            "prose max-w-none leading-relaxed",
+            rx.color_mode_cond("text-gray-700", "text-gray-200"),
+        ],
+        component_map={"pre": _code_block},
     )
 
 
@@ -104,11 +154,6 @@ def ai_avatar() -> rx.Component:
 
 def message_bubble(message: Message, index: int) -> rx.Component:
     """A single message bubble (user or AI)."""
-    is_streaming_ai_last = (
-        ChatState.is_generating
-        & (~message.is_user)
-        & (index == (ChatState.messages.length() - 1))
-    )
     return rx.box(
         # Avatar
         rx.cond(
@@ -130,27 +175,11 @@ def message_bubble(message: Message, index: int) -> rx.Component:
                 message_actions(message.id),
                 class_name="flex items-center justify-between mb-1",
             ),
-            # Message content: plain text while last AI message is streaming;
-            # markdown (with Shiki code blocks) once complete.
+            # Message content: always markdown to keep render tree stable.
+            # Streaming safety for unfinished fenced code is handled in state.py
+            # via _close_open_code_block().
             rx.box(
-                rx.cond(
-                    is_streaming_ai_last,
-                    rx.el.pre(
-                        message.content,
-                        class_name=[
-                            "whitespace-pre-wrap break-words leading-relaxed font-sans text-sm",
-                            rx.color_mode_cond("text-gray-700", "text-gray-200"),
-                        ],
-                    ),
-                    rx.markdown(
-                        message.content,
-                        class_name=[
-                            "prose max-w-none leading-relaxed",
-                            rx.color_mode_cond("text-gray-700", "text-gray-200"),
-                        ],
-                        component_map={"pre": _code_block},
-                    ),
-                ),
+                _message_markdown(message.content),
             ),
             class_name="flex-1",
         ),
@@ -304,17 +333,7 @@ def chat_header() -> rx.Component:
         rx.box(
             rx.color_mode_cond(
                 rx.select(
-                    [
-                        "github-light",
-                        "github-light-default",
-                        "one-light",
-                        "light-plus",
-                        "min-light",
-                        "solarized-light",
-                        "catppuccin-latte",
-                        "vitesse-light",
-                        "snazzy-light",
-                    ],
+                    list(LIGHT_CODE_THEMES),
                     value=ChatState.light_code_theme,
                     on_change=ChatState.set_light_code_theme,
                     placeholder="Light code theme",
@@ -322,19 +341,7 @@ def chat_header() -> rx.Component:
                     class_name="text-xs",
                 ),
                 rx.select(
-                    [
-                        "nord",
-                        "one-dark-pro",
-                        "dracula",
-                        "night-owl",
-                        "dark-plus",
-                        "github-dark",
-                        "github-dark-default",
-                        "material-theme-ocean",
-                        "tokyo-night",
-                        "catppuccin-mocha",
-                        "ayu-dark",
-                    ],
+                    list(DARK_CODE_THEMES),
                     value=ChatState.code_theme,
                     on_change=ChatState.set_code_theme,
                     placeholder="Dark code theme",

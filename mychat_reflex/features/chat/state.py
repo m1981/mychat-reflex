@@ -76,6 +76,15 @@ class ChatState(rx.State):
     def set_light_code_theme(self, theme: str):
         self.light_code_theme = theme
 
+    @rx.var
+    def active_code_theme(self) -> str:
+        """Compile-safe active code theme.
+
+        Note: server-side compile does not always expose frontend color mode,
+        so default to dark theme here to avoid compile-time attribute errors.
+        """
+        return self.code_theme
+
     # ========================================================================
     # COMPUTED PROPERTIES
     # ========================================================================
