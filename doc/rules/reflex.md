@@ -44,7 +44,45 @@ def my_page():
     )
 ```
 
-### 5. Event Handler Yielding (UX Best Practice)
+### 5. Hook-Safe Nested Renderers (`component_map`, `rx.foreach`, callbacks)
+Some Reflex APIs accept Python functions that are later compiled into frontend render callbacks. Treat these functions as **hook-sensitive boundaries**.
+
+*   **The Rule:** Any function passed into `rx.markdown(component_map=...)`, `rx.foreach(...)`, or similar nested render APIs must be **pure, static, and hook-free**.
+*   **Never read reactive state inside these callbacks.** Avoid:
+    *   `SomeState.some_var`
+    *   computed vars like `SomeState.active_theme`
+    *   `rx.color_mode_cond(...)`
+    *   any helper that depends on frontend context
+*   **Why?** Reflex may compile these helpers into React functions that call `useContext(...)`. If such a function is invoked during list rendering or conditional rendering, React can detect a changing hook order and throw warnings like: **"React has detected a change in the order of Hooks"**.
+*   **High-risk combination:** `rx.markdown(component_map=...)` inside `rx.foreach(...)` where the component-map callback references `State`.
+*   **Safe pattern:** Compute reactive values outside the callback, or use static values inside the callback only.
+
+```python
+# ❌ BAD: renderer callback reads reactive state.
+def code_block(text, **props):
+    return ShikiHighLevelCodeBlock.create(
+        text,
+        language=props.get("language"),
+        theme=ChatState.active_code_theme,
+    )
+
+rx.foreach(ChatState.messages, lambda message: rx.markdown(
+    message.content,
+    component_map={"pre": code_block},
+))
+
+# ✅ BETTER: keep nested renderer pure and non-reactive.
+def code_block(text, **props):
+    return ShikiHighLevelCodeBlock.create(
+        text,
+        language=props.get("language"),
+        theme="nord",
+    )
+```
+
+*   **Debugging rule:** If React reports hook-order problems, inspect the generated `.web/app/routes/*.jsx` output and search for nested helper functions that unexpectedly contain `useContext(...)`.
+
+### 6. Event Handler Yielding (UX Best Practice)
 If you have an event handler that takes more than 200ms (like querying a database or calling an OpenAI API), you must yield intermediate states to keep the UI responsive.
 
 ```python
@@ -68,7 +106,7 @@ class ChatState(rx.State):
 
 
 
-### 6. The "Non-Blocking Hydration" Pattern
+### 7. The "Non-Blocking Hydration" Pattern
 **The Problem:** If you fetch database records in your `rx.State` initialization or block the main thread when a page loads, the user stares at a blank white screen while the server thinks.
 **The Solution:** Render the UI instantly with empty/skeleton data, then use the page's `on_load` event to fetch data asynchronously using `yield`.
 
@@ -99,7 +137,7 @@ def dashboard():
     )
 ```
 
-### 7. WebSocket Traffic Control (Debouncing)
+### 8. WebSocket Traffic Control (Debouncing)
 **The Problem:** You build a live search bar. If a user types "Reflex" at 100 WPM, the frontend fires 6 WebSocket events in half a second. The server tries to run 6 database queries simultaneously, causing race conditions and UI jitter.
 **The Solution:** Always debounce text inputs that trigger backend logic.
 
@@ -120,7 +158,7 @@ def search_bar():
     )
 ```
 
-### 8. The Background Task Pattern (`@rx.background`)
+### 9. The Background Task Pattern (`@rx.background`)
 **The Problem:** You need to generate a PDF report or run an AI model that takes 30 seconds. If you do this in a normal event handler, you lock the `rx.State`. The user can't click other buttons, and the WebSocket might timeout.
 **The Solution:** Use `@rx.background`. This detaches the function from the main state lock, allowing the user to continue using the app while the server works in the background.
 
@@ -149,7 +187,7 @@ class ReportState(rx.State):
             self.is_generating = False
 ```
 
-### 9. Component Factories (Pythonic HOCs)
+### 10. Component Factories (Pythonic HOCs)
 **The Problem:** You have 15 different forms in your app, and you are copying and pasting `rx.vstack`, `rx.text`, and `rx.input` with the same styling everywhere.
 **The Solution:** Treat Python functions like React Higher-Order Components (HOCs). Create factory functions that return configured `rx.Component` objects.
 
