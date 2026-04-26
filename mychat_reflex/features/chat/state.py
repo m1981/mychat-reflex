@@ -283,7 +283,8 @@ class ChatState(rx.State):
                 char_buffer += char
                 full_response += char
 
-                if len(char_buffer) >= 12:
+                # FIX: Increased buffer from 12 to 40 to prevent React thrashing
+                if len(char_buffer) >= 40:
                     async with self:
                         self.messages[-1].content = _close_open_code_block(
                             full_response

@@ -56,15 +56,10 @@ DYNAMIC_CODE_THEME_CONFIG = {
 }
 
 
-def _code_block(text, **props):
-    """Render fenced code with a hook-free callback.
-
-    The actual Shiki theme is resolved inside the custom React component from
-    color mode + localStorage so this callback never touches Reflex state.
-    """
-    language = props.get(
-        "language"
-    )  # Var[str] at runtime; None during mock compilation
+def _shiki_code_block(text, **props):
+    """Heavy WASM-based Shiki renderer (Used for finished messages)."""
+    # Reverted to props.get("language") to prevent strict Literal type crashes during compile
+    language = props.get("language")
     return ShikiHighLevelCodeBlock.create(
         text,
         language=language,
@@ -76,15 +71,48 @@ def _code_block(text, **props):
     )
 
 
-def _message_markdown(content) -> rx.Component:
-    """Render markdown while keeping the code-block renderer hook-safe."""
-    return rx.markdown(
-        content,
-        class_name=[
-            "prose max-w-none leading-relaxed",
-            rx.color_mode_cond("text-gray-700", "text-gray-200"),
-        ],
-        component_map={"pre": _code_block},
+def _fast_code_block(text, **props):
+    """Fast standard renderer (Used during streaming to prevent flickering)."""
+    # Using raw HTML elements prevents Reflex compiler crashes with _MOCK_ARG
+    # and is extremely fast for React to render during streaming.
+    return rx.el.pre(
+        rx.el.code(text),
+        class_name="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg overflow-x-auto my-4 text-sm font-mono text-gray-800 dark:text-gray-200",
+    )
+
+
+# Use "pre" as required by Reflex >= 0.8.25
+STATIC_MARKDOWN_MAP = {
+    "pre": _shiki_code_block,
+}
+
+STREAMING_MARKDOWN_MAP = {
+    "pre": _fast_code_block,
+}
+
+
+def _message_markdown(content: str, is_streaming: bool) -> rx.Component:
+    """Render markdown, choosing the safe renderer if currently streaming."""
+
+    common_classes = [
+        "prose max-w-none leading-relaxed",
+        rx.color_mode_cond("text-gray-700", "text-gray-200"),
+    ]
+
+    return rx.cond(
+        is_streaming,
+        # 1. Fast renderer for streaming
+        rx.markdown(
+            content,
+            class_name=common_classes,
+            component_map=STREAMING_MARKDOWN_MAP,
+        ),
+        # 2. Heavy Shiki renderer for finished messages
+        rx.markdown(
+            content,
+            class_name=common_classes,
+            component_map=STATIC_MARKDOWN_MAP,
+        ),
     )
 
 
@@ -154,6 +182,11 @@ def ai_avatar() -> rx.Component:
 
 def message_bubble(message: Message, index: int) -> rx.Component:
     """A single message bubble (user or AI)."""
+
+    # Determine if this specific message is currently being streamed
+    is_last_message = index == (ChatState.messages.length() - 1)
+    is_currently_streaming = is_last_message & ChatState.is_generating
+
     return rx.box(
         # Avatar
         rx.cond(
@@ -175,13 +208,11 @@ def message_bubble(message: Message, index: int) -> rx.Component:
                 message_actions(message.id),
                 class_name="flex items-center justify-between mb-1",
             ),
-            # Message content: always markdown to keep render tree stable.
-            # Streaming safety for unfinished fenced code is handled in state.py
-            # via _close_open_code_block().
+            # Message content: Pass streaming state to prevent Shiki flicker
             rx.box(
-                _message_markdown(message.content),
+                _message_markdown(message.content, is_currently_streaming),
             ),
-            class_name="flex-1",
+            class_name="flex-1 min-w-0",  # Added min-w-0 to prevent flex overflow
         ),
         class_name="flex gap-4 group max-w-4xl mx-auto w-full",
     )
