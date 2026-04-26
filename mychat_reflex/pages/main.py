@@ -20,7 +20,7 @@ def main_page() -> rx.Component:
         chat_area(),
         notes_panel(),
         class_name=[
-            "font-sans antialiased h-screen w-full overflow-hidden flex",
+            "font-sans  h-screen w-full overflow-hidden flex",
             rx.color_mode_cond("bg-white text-gray-800", "bg-gray-950 text-gray-100"),
         ],
     )
