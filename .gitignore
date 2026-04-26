@@ -7,4 +7,6 @@ assets/external/
 .idea
 .intent
 .coverage
-/.idea/
+.web
+!.web/components/shiki/code.js
+!.web/components/reflex/radix_themes_color_mode_provider.js
