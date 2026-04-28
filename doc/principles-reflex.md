@@ -1,12 +1,3 @@
-Here is a commercial-grade `skill.md` document outlining the best practices for building production-ready Reflex applications. You can save this directly to your project's documentation folder.
-
-***
-
-# `skill.md`: Reflex Framework Best Practices
-
-**Target Audience:** Senior Python/Web Developers
-**Framework Context:** Reflex (Vite/React Router architecture, circa 2026)
-
 ## 1. Project Architecture & Organization
 Do not put everything in one file. Treat a Reflex app like a standard modern web application.
 

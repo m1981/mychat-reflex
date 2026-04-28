@@ -216,3 +216,204 @@ def login_page():
         form_field("Password", "••••••••", AuthState.set_password),
     )
 ```
+
+### 11. LocalStorage State Variables (v0.8+)
+**The Problem:** You want UI preferences (theme, model selection, settings) to persist across browser sessions without database overhead.
+**The Solution:** Use `rx.LocalStorage` for client-side persistence.
+
+**Critical Rules:**
+1. **No Type Hints:** Do NOT add type hints to LocalStorage variables. Reflex infers types from default values.
+2. **No Direct Comparisons:** Cannot compare LocalStorage values directly in `@rx.var` computed properties.
+3. **Use Type Conversion Methods:** Call `.bool()`, `.to(int)`, or convert in computed properties.
+
+```python
+# ❌ BAD: Type hints cause "Expected field to receive type X, got LocalStorage" errors
+class MyState(rx.State):
+    temperature: float = rx.LocalStorage(0.7, name="temperature")
+    enable_feature: bool = rx.LocalStorage(False, name="feature")
+
+# ✅ GOOD: No type hints
+class MyState(rx.State):
+    temperature = rx.LocalStorage(0.7, name="temperature")
+    enable_feature = rx.LocalStorage(False, name="feature")
+
+    # Create computed property for comparisons
+    @rx.var
+    def temperature_int(self) -> int:
+        try:
+            return int(self.temperature)
+        except (ValueError, TypeError):
+            return 70  # default
+```
+
+**Component Usage:**
+```python
+# ❌ BAD: Direct comparison fails
+rx.cond(
+    ChatState.reasoning_budget >= 16000,  # TypeError: comparison not supported
+    "High",
+    "Low"
+)
+
+# ✅ GOOD: Use computed property
+rx.cond(
+    ChatState.reasoning_budget_int >= 16000,
+    "High",
+    "Low"
+)
+
+# ❌ BAD: Switch expects bool, gets LocalStorage
+rx.switch(
+    checked=ChatState.enable_feature,  # TypeError: expected bool
+    on_change=ChatState.set_enable_feature,
+)
+
+# ✅ GOOD: Call .bool() method
+rx.switch(
+    checked=ChatState.enable_feature.bool(),
+    on_change=ChatState.set_enable_feature,
+)
+```
+
+**When to Use LocalStorage vs Database:**
+- **LocalStorage:** UI preferences, theme, layout, recently selected options (per-browser)
+- **Database:** User data, chat history, notes, settings that sync across devices
+
+### 12. Dynamic Dependency Injection at Runtime
+**The Problem:** You need to switch LLM providers (Anthropic ↔ OpenAI) without restarting the application.
+**The Solution:** Use the Service Locator pattern with runtime adapter instantiation.
+
+```python
+class ChatState(rx.State):
+    selected_model = rx.LocalStorage("claude-sonnet-4-5", name="model")
+
+    async def _ensure_correct_adapter(self, model: str):
+        """Switch adapter if model changed."""
+        import os
+        from infrastructure.llm_adapters import AnthropicAdapter, OpenAIAdapter
+
+        current_service = AppContainer.resolve_llm_service()
+        current_model = getattr(current_service, "model", None)
+
+        # Skip if already correct
+        if current_model == model:
+            return
+
+        # Determine which adapter to use
+        if model.startswith("claude"):
+            api_key = os.getenv("ANTHROPIC_API_KEY", "")
+            adapter = AnthropicAdapter(api_key=api_key, model=model)
+        elif model.startswith(("gpt", "o1")):
+            api_key = os.getenv("OPENAI_API_KEY", "")
+            adapter = OpenAIAdapter(api_key=api_key, model=model)
+
+        # Register new adapter (old one gets garbage collected)
+        AppContainer.register_llm_service(adapter)
+
+    @rx.event(background=True)
+    async def handle_send_message(self):
+        async with self:
+            current_model = self.selected_model
+
+        # Switch adapter if needed
+        await self._ensure_correct_adapter(current_model)
+
+        # Now use case will get correct adapter
+        llm_service = AppContainer.resolve_llm_service()
+        # ... rest of message handling
+```
+
+**Benefits:**
+- No app restart required
+- Clean resource management (old adapters GC'd)
+- Preserves DI architecture
+- Works with background tasks
+
+**Gotchas:**
+- Always check current adapter before creating new one (avoid unnecessary instantiation)
+- API keys must be available in environment at runtime
+- Read the model selection in `async with self:` block before switching
+
+### 13. Popover Components and Interactive Controls
+**The Problem:** Building dropdown menus, modals, or tooltips with proper accessibility and positioning.
+**The Solution:** Use `rx.popover` components following Reflex's structure.
+
+**Pattern:**
+```python
+def model_selector() -> rx.Component:
+    return rx.popover.root(
+        rx.popover.trigger(
+            rx.button("Select Model"),
+        ),
+        rx.popover.content(
+            rx.box(
+                rx.button(
+                    "Option 1",
+                    on_click=lambda: State.set_option("opt1"),
+                ),
+                rx.button(
+                    "Option 2",
+                    on_click=lambda: State.set_option("opt2"),
+                ),
+            ),
+        ),
+    )
+```
+
+**Best Practices:**
+- Trigger should be a single interactive element (button, icon)
+- Content should have explicit width (`min-w-[200px]`) to prevent wrapping
+- Use `rx.cond` inside popover to show selection state (highlight selected item)
+- Popovers auto-close on outside click (no manual state needed)
+- For nested conditional content, use `rx.cond` not Python `if`
+
+### 14. Computed Properties vs Regular Methods
+**The Problem:** Confusion about when to use `@rx.var` vs regular methods in State.
+**The Solution:** Follow these rules strictly.
+
+**Use `@rx.var` (Computed Property) when:**
+- Deriving display values from state (e.g., formatting, mapping IDs to names)
+- Value is read-only and deterministic
+- Needed in UI rendering (text, conditions, styling)
+- No side effects
+
+**Use Regular Methods when:**
+- Handling events (clicks, changes, submissions)
+- Mutating state
+- Making API calls or database queries
+- Side effects are required
+
+```python
+class ChatState(rx.State):
+    selected_model = rx.LocalStorage("gpt-4o", name="model")
+
+    # ✅ Computed property: derives display value
+    @rx.var
+    def model_display_name(self) -> str:
+        names = {"gpt-4o": "GPT-4o", "claude-sonnet-4-5": "Claude Sonnet 4.5"}
+        return names.get(str(self.selected_model), self.selected_model)
+
+    # ✅ Regular method: mutates state (event handler)
+    def set_selected_model(self, model: str):
+        self.selected_model = model
+```
+
+**In UI:**
+```python
+# ✅ Access computed property directly (no parentheses)
+rx.text(ChatState.model_display_name)
+
+# ✅ Call event handler
+rx.button("Change", on_click=lambda: ChatState.set_selected_model("gpt-4o"))
+```
+
+**Critical Error to Avoid:**
+```python
+# ❌ Calling regular method as if it were a computed property
+rx.text(ChatState.get_model_name())  # Creates EventSpec, not string!
+
+# ✅ Use @rx.var instead
+@rx.var
+def model_name(self) -> str:
+    return self._get_model_name()
+```

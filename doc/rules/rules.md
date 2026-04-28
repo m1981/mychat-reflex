@@ -34,3 +34,31 @@ We test the business logic, not the framework.
 *   **Use-Case Testing:** Test `use_cases.py` using an in-memory SQLite database and a `FakeLLMAdapter`. These tests must run in `< 0.05` seconds.
 *   **Mocking Async Generators:** `unittest.mock` is notoriously broken when dealing with async generators (like OpenAI's stream). Do not use `AsyncMock` for this. Instead, build a pure Python **Fake** class that yields a fake chunk and stores `last_kwargs` for assertions.
 *   **Mocking Async Context Managers:** For SDKs like Anthropic that use `async with`, use `unittest.mock.patch` and explicitly mock the `__aenter__` method to return the fake stream.
+
+## 💾 6. LocalStorage & Client-Side State Persistence
+Reflex v0.8+ provides `rx.LocalStorage` for browser-side state persistence.
+*   **No Type Hints:** Never add type hints to LocalStorage variables. Let Reflex infer from defaults.
+    *   ❌ `temperature: float = rx.LocalStorage(0.7)`
+    *   ✅ `temperature = rx.LocalStorage(0.7)`
+*   **Type Conversion Required:** LocalStorage stores values as strings internally. For comparisons:
+    *   Create `@rx.var` computed properties that convert to proper types
+    *   Use `.bool()` method for boolean components like `rx.switch`
+    *   Example: `@rx.var def temp_int(self) -> int: return int(self.temperature)`
+*   **Cannot Compare Directly:** `ChatState.budget >= 1000` will fail. Use computed properties.
+*   **Use Cases:** UI preferences, theme selection, recently used options, layout state
+*   **Not For:** User data that syncs across devices (use database instead)
+
+## 🔄 7. Runtime Dependency Injection & Adapter Switching
+When supporting multiple LLM providers, implement dynamic adapter switching without app restart.
+*   **Pattern:** Create `_ensure_correct_adapter()` method in State that checks current adapter and instantiates new one if model changed
+*   **Registration:** Use `AppContainer.register_llm_service(new_adapter)` to swap adapters
+*   **Timing:** Call adapter switching before each message send in background task
+*   **Resource Management:** Old adapters are automatically garbage collected
+*   **API Keys:** Must be available in environment at runtime (not compile time)
+*   **Performance:** Check current adapter before creating new one to avoid unnecessary instantiation
+
+## 🎯 8. Computed Properties vs Event Handlers
+*   **Use `@rx.var` for:** Read-only derived values, formatting, display names (accessed without parentheses in UI)
+*   **Use Regular Methods for:** Event handlers, state mutations, API calls (called with `on_click=State.method`)
+*   **Critical:** Never call regular methods as computed properties in UI - creates EventSpec not value
+*   **F-strings Work:** Can use f-strings with LocalStorage in UI (e.g., `f"{State.temperature:.1f}"`)
