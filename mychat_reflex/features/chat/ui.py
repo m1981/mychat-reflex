@@ -95,7 +95,7 @@ def _message_markdown(content: str, is_streaming: bool) -> rx.Component:
 
     common_classes = [
         "prose max-w-none leading-relaxed",
-        rx.color_mode_cond("text-gray-700", "text-gray-200"),
+        rx.color_mode_cond("text-[#3c4043]", "text-gray-200"),
     ]
 
     return rx.cond(
@@ -127,26 +127,26 @@ def message_actions(message_id: str) -> rx.Component:
             rx.icon("copy", size=14),
             on_click=lambda: ChatState.copy_message(message_id),
             variant="ghost",
-            class_name="hover:text-gray-700 cursor-pointer",
+            class_name="hover:text-[#202124] dark:hover:text-gray-200 cursor-pointer",
         ),
         rx.button(
             rx.icon("pencil", size=14),
             variant="ghost",
-            class_name="hover:text-gray-700 cursor-pointer",
+            class_name="hover:text-[#202124] dark:hover:text-gray-200 cursor-pointer",
         ),
         rx.button(
             rx.icon("trash-2", size=14),
             on_click=lambda: ChatState.delete_message(message_id),
             variant="ghost",
-            class_name="hover:text-gray-700 cursor-pointer",
+            class_name="hover:text-[#202124] dark:hover:text-gray-200 cursor-pointer",
         ),
         rx.button(
             rx.icon("rotate-cw", size=14),
             on_click=lambda: ChatState.regenerate_message(message_id),
             variant="ghost",
-            class_name="hover:text-gray-700 cursor-pointer",
+            class_name="hover:text-[#202124] dark:hover:text-gray-200 cursor-pointer",
         ),
-        class_name="flex gap-3 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity",
+        class_name="flex gap-3 text-[#5f6368] dark:text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity",
     )
 
 
@@ -163,13 +163,16 @@ def message_bubble(message: Message, index: int) -> rx.Component:
             rx.box(
                 rx.text(
                     rx.cond(message.is_user, "User", "Model"),
-                    class_name="font-semibold text-sm",
+                    class_name=[
+                        "font-semibold text-sm",
+                        rx.color_mode_cond("text-[#202124]", "text-gray-100"),
+                    ],
                 ),
                 rx.text(
                     message.timestamp_formatted,
                     class_name=[
                         "text-xs ml-2",
-                        rx.color_mode_cond("text-gray-500", "text-gray-400"),
+                        rx.color_mode_cond("text-[#5f6368]", "text-gray-400"),
                     ],
                 ),
                 class_name="flex items-baseline mb-1",
@@ -185,8 +188,8 @@ def message_bubble(message: Message, index: int) -> rx.Component:
                 rx.cond(
                     ~message.is_user,
                     rx.text(
-                        "4.2s",  # Mock run-time for look and feel
-                        class_name="text-xs px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500 ml-auto",
+                        "4.2s",
+                        class_name="text-xs px-2 py-1 rounded-full bg-[#f1f3f4] dark:bg-gray-800 text-[#5f6368] dark:text-gray-400 ml-auto",
                     ),
                 ),
                 class_name="flex items-center justify-between mt-2",
@@ -194,8 +197,8 @@ def message_bubble(message: Message, index: int) -> rx.Component:
             class_name="flex-1 min-w-0 flex flex-col",
         ),
         class_name=[
-            "flex group max-w-4xl mx-auto w-full px-4 py-6 rounded-2xl hover:bg-black/5 dark:hover:bg-white/5 transition-colors",
-            rx.color_mode_cond("text-gray-900", "text-gray-100"),
+            "flex group max-w-4xl mx-auto w-full px-4 py-6 rounded-2xl hover:bg-[#f8f9fa] dark:hover:bg-white/5 transition-colors",
+            rx.color_mode_cond("text-[#202124]", "text-gray-100"),
         ],
     )
 
@@ -533,16 +536,16 @@ def input_tools_right() -> rx.Component:
         rx.button(
             rx.icon("layout-grid", size=16),
             variant="ghost",
-            class_name="w-8 h-8 rounded-full bg-transparent text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700 flex items-center justify-center cursor-pointer transition",
+            class_name="w-8 h-8 rounded-full bg-transparent text-[#5f6368] dark:text-gray-400 hover:bg-[#e8eaed] dark:hover:bg-gray-700 flex items-center justify-center cursor-pointer transition",
         ),
         rx.button(
             rx.icon("plus", size=16),
             variant="outline",
-            class_name="w-8 h-8 rounded-full border border-gray-300 bg-white text-gray-500 hover:bg-gray-50 dark:border-gray-600 dark:bg-transparent dark:hover:bg-gray-700 flex items-center justify-center cursor-pointer transition",
+            class_name="w-8 h-8 rounded-full border border-[#dadce0] dark:border-gray-600 bg-white dark:bg-transparent text-[#5f6368] dark:text-gray-400 hover:bg-[#f1f3f4] dark:hover:bg-gray-700 flex items-center justify-center cursor-pointer transition",
         ),
         rx.button(
             rx.icon("send", size=16),
-            on_click=ChatState.handle_send_message,  # ARCHITECT FIX: Updated to new method name
+            on_click=ChatState.handle_send_message,
             class_name="w-10 h-10 rounded-full bg-[#1967d2] text-white hover:bg-[#1557b0] flex items-center justify-center cursor-pointer shadow-md transition-transform active:scale-95 border-none",
         ),
         class_name="flex items-center gap-2",
@@ -561,9 +564,9 @@ def chat_input() -> rx.Component:
                 rows="1",
                 auto_height=True,
                 class_name=[
-                    "w-full resize-none outline-none bg-transparent border-0 focus:ring-0 px-2 py-3",
+                    "w-full resize-none outline-none bg-transparent border-0 focus:ring-0 px-3 py-3 text-[15px]",
                     rx.color_mode_cond(
-                        "text-gray-800 placeholder-gray-500",
+                        "text-[#202124] placeholder-[#5f6368]",
                         "text-gray-200 placeholder-gray-400",
                     ),
                 ],
@@ -572,16 +575,24 @@ def chat_input() -> rx.Component:
             rx.box(
                 input_tools_left(),
                 input_tools_right(),
-                class_name="flex justify-between items-center mt-1 px-1",
+                class_name="flex justify-between items-center pt-1 pb-1 px-2",
             ),
             class_name=[
-                "max-w-4xl mx-auto rounded-3xl p-3 shadow-sm transition-all border-none focus-within:ring-2 focus-within:ring-[#1967d2]/20",
+                # rounded-xl = 12px, matching Google AI Studio card shape
+                # google-shadow = custom multi-layer shadow defined in styles.css
+                "max-w-3xl mx-auto rounded-xl px-3 pt-2 pb-1 transition-all"
+                " border focus-within:border-[#aecbfa] dark:border-transparent dark:focus-within:border-[#4a90d9]"
+                " google-shadow",
                 rx.color_mode_cond(
-                    "bg-[#f0f4f9] hover:bg-[#e9eef6]", "bg-gray-800 hover:bg-gray-700"
+                    "bg-[#f8f9fa] border-[#e0e0e0]",
+                    "bg-[#1e1f20] border-gray-700",
                 ),
             ],
         ),
-        class_name=["p-6", rx.color_mode_cond("bg-white", "bg-gray-900")],
+        class_name=[
+            "px-6 pb-6 pt-4",
+            rx.color_mode_cond("bg-white", "bg-[#111827]"),
+        ],
     )
 
 
@@ -597,16 +608,16 @@ def global_search() -> rx.Component:
             rx.icon(
                 "search",
                 size=16,
-                class_name="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400",
+                class_name="absolute left-4 top-1/2 transform -translate-y-1/2 text-[#5f6368] dark:text-gray-400",
             ),
             rx.input(
                 placeholder="Search",
                 value=ChatState.sidebar_search,
                 on_change=ChatState.set_sidebar_search,
                 class_name=[
-                    "w-full rounded-full py-2 pl-10 pr-4 border focus:outline-none focus:border-blue-500",
+                    "w-full rounded-full py-2 pl-10 pr-4 border focus:outline-none focus:border-[#1967d2]",
                     rx.color_mode_cond(
-                        "border-gray-400 bg-white text-gray-800",
+                        "border-[#dadce0] bg-white text-[#202124] placeholder-[#5f6368]",
                         "border-gray-600 bg-gray-800 text-gray-100 placeholder-gray-500",
                     ),
                 ],
@@ -615,7 +626,7 @@ def global_search() -> rx.Component:
         ),
         class_name=[
             "p-4 border-b flex justify-center",
-            rx.color_mode_cond("border-gray-300", "border-gray-700"),
+            rx.color_mode_cond("border-[#dadce0]", "border-gray-700"),
         ],
     )
 
@@ -628,13 +639,13 @@ def chat_header() -> rx.Component:
             rx.icon(
                 "menu",
                 size=20,
-                class_name="text-gray-500 mr-4 cursor-pointer hidden md:block",
+                class_name="text-[#5f6368] dark:text-gray-400 mr-4 cursor-pointer hidden md:block",
             ),
             rx.heading(
                 "Playground",
                 class_name=[
                     "text-[22px] font-normal",
-                    rx.color_mode_cond("text-gray-800", "text-gray-200"),
+                    rx.color_mode_cond("text-[#202124]", "text-gray-200"),
                 ],
             ),
             rx.box(
@@ -642,7 +653,7 @@ def chat_header() -> rx.Component:
                 class_name=[
                     "ml-4 px-3 py-1 rounded-full border cursor-help",
                     rx.color_mode_cond(
-                        "bg-gray-100 border-gray-200 text-gray-600",
+                        "bg-[#f1f3f4] border-[#dadce0] text-[#5f6368]",
                         "bg-gray-800 border-gray-700 text-gray-300",
                     ),
                 ],
@@ -672,17 +683,17 @@ def chat_header() -> rx.Component:
             rx.button(
                 rx.icon("pen-tool", size=18),
                 variant="ghost",
-                class_name="text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full w-10 h-10 cursor-pointer",
+                class_name="text-[#5f6368] dark:text-gray-400 hover:bg-[#f1f3f4] dark:hover:bg-gray-800 rounded-full w-10 h-10 cursor-pointer",
             ),
             rx.button(
                 rx.icon("plus", size=18),
                 variant="ghost",
-                class_name="text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full w-10 h-10 cursor-pointer",
+                class_name="text-[#5f6368] dark:text-gray-400 hover:bg-[#f1f3f4] dark:hover:bg-gray-800 rounded-full w-10 h-10 cursor-pointer",
             ),
             rx.button(
                 rx.icon("more-vertical", size=18),
                 variant="ghost",
-                class_name="text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full w-10 h-10 cursor-pointer",
+                class_name="text-[#5f6368] dark:text-gray-400 hover:bg-[#f1f3f4] dark:hover:bg-gray-800 rounded-full w-10 h-10 cursor-pointer",
             ),
             rx.button(
                 rx.icon("sliders-horizontal", size=18),
@@ -690,7 +701,7 @@ def chat_header() -> rx.Component:
                 class_name=[
                     "rounded-full w-10 h-10 cursor-pointer",
                     rx.color_mode_cond(
-                        "text-blue-600 bg-blue-50 hover:bg-blue-100",
+                        "text-[#1967d2] bg-[#e8f0fe] hover:bg-[#d2e3fc]",
                         "text-blue-300 bg-blue-900/30 hover:bg-blue-900/50",
                     ),
                 ],
@@ -700,7 +711,7 @@ def chat_header() -> rx.Component:
         class_name=[
             "px-6 py-3 border-b flex justify-between items-center",
             rx.color_mode_cond(
-                "border-gray-200 bg-white",
+                "border-[#dadce0] bg-white",
                 "border-gray-800 bg-[#1e1f20]",
             ),
         ],
@@ -727,6 +738,6 @@ def chat_area() -> rx.Component:
         chat_input(),
         class_name=[
             "flex-1 flex flex-col h-full relative min-w-0",
-            rx.color_mode_cond("bg-white", "bg-gray-900"),
+            rx.color_mode_cond("bg-white", "bg-[#111827]"),
         ],
     )
