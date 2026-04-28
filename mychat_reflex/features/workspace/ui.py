@@ -34,16 +34,19 @@ def action_buttons() -> rx.Component:
     """New chat and New folder buttons."""
     return rx.box(
         rx.button(
-            "New chat",
+            rx.icon("plus", size=16),
+            rx.text("New chat"),
             on_click=ChatState.create_new_chat,
-            class_name="flex-1 bg-green-200 border border-green-400 text-green-900 py-1.5 px-2 rounded-md text-sm font-medium hover:bg-green-300 transition cursor-pointer",
+            variant="surface",
+            class_name="flex-1 flex justify-center items-center gap-2 bg-[#e8f0fe] text-[#1967d2] hover:bg-[#d2e3fc] dark:bg-blue-900/30 dark:text-blue-200 dark:hover:bg-blue-900/50 py-2 px-4 rounded-full text-sm font-medium transition cursor-pointer shadow-sm border-none",
         ),
         rx.button(
-            "New folder",
+            rx.icon("folder-plus", size=16),
             on_click=ChatState.create_new_folder,
-            class_name="flex-1 bg-green-200 border border-green-400 text-green-900 py-1.5 px-2 rounded-md text-sm font-medium hover:bg-green-300 transition cursor-pointer",
+            variant="ghost",
+            class_name="bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 dark:bg-transparent dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800 p-2 rounded-full transition cursor-pointer shadow-sm",
         ),
-        class_name="p-4 flex gap-2",
+        class_name="p-4 flex gap-2 items-center",
     )
 
 
@@ -72,9 +75,14 @@ def sidebar_search() -> rx.Component:
 def chat_item(chat_id: str, chat_title: str) -> rx.Component:
     """Individual chat item in the navigation."""
     return rx.el.li(
-        chat_title,
-        on_click=lambda: ChatState.select_chat(chat_id),
-        class_name="cursor-pointer hover:text-blue-600",
+        rx.button(
+            rx.icon("message-square", size=14, class_name="mr-2 text-gray-400"),
+            chat_title,
+            on_click=lambda: ChatState.select_chat(chat_id),
+            variant="ghost",
+            class_name="w-full justify-start text-left bg-transparent text-gray-700 hover:bg-gray-200 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white py-2 px-3 rounded-full text-sm font-medium transition-colors cursor-pointer",
+        ),
+        class_name="list-none",
     )
 
 
@@ -83,14 +91,11 @@ def folder_section(folder_name: str, chats: list[tuple[str, str]]) -> rx.Compone
     return rx.box(
         rx.box(
             folder_name,
-            class_name="bg-blue-200 border border-blue-400 text-blue-900 px-3 py-1.5 rounded-md font-medium text-sm mb-2 cursor-pointer",
+            class_name="text-xs font-semibold text-gray-500 uppercase tracking-wider px-3 mb-2 mt-4",
         ),
         rx.el.ul(
             *[chat_item(chat_id, chat_title) for chat_id, chat_title in chats],
-            class_name=[
-                "ml-4 space-y-2 text-sm font-medium",
-                rx.color_mode_cond("text-gray-700", "text-gray-300"),
-            ],
+            class_name="space-y-0.5",
         ),
     )
 
@@ -125,6 +130,7 @@ def sidebar_footer() -> rx.Component:
         rx.button(
             rx.icon("settings", class_name="text-lg"),
             rx.text("Settings"),
+            variant="ghost",
             class_name=[
                 "flex items-center gap-3 font-medium w-full cursor-pointer",
                 rx.color_mode_cond(
@@ -142,6 +148,7 @@ def sidebar_footer() -> rx.Component:
                 ],
             ),
             rx.text("Michal"),
+            variant="ghost",
             class_name=[
                 "flex items-center gap-3 font-medium w-full cursor-pointer",
                 rx.color_mode_cond(
@@ -165,9 +172,9 @@ def sidebar() -> rx.Component:
         navigation_list(),
         sidebar_footer(),
         class_name=[
-            "w-64 flex-shrink-0 border-r flex flex-col h-full",
+            "w-[280px] flex-shrink-0 border-r flex flex-col h-full",
             rx.color_mode_cond(
-                "border-gray-300 bg-white", "border-gray-700 bg-gray-900"
+                "border-gray-200 bg-[#f8f9fa]", "border-gray-700 bg-[#1e1f20]"
             ),
         ],
     )

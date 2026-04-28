@@ -8,7 +8,6 @@ Contains all UI elements for the chat bounded context:
 """
 
 import reflex as rx
-from typing import Optional
 from reflex.components.datadisplay.shiki_code_block import ShikiHighLevelCodeBlock
 
 from .state import ChatState
@@ -127,56 +126,27 @@ def message_actions(message_id: str) -> rx.Component:
         rx.button(
             rx.icon("copy", size=14),
             on_click=lambda: ChatState.copy_message(message_id),
+            variant="ghost",
             class_name="hover:text-gray-700 cursor-pointer",
         ),
         rx.button(
             rx.icon("pencil", size=14),
+            variant="ghost",
             class_name="hover:text-gray-700 cursor-pointer",
         ),
         rx.button(
             rx.icon("trash-2", size=14),
             on_click=lambda: ChatState.delete_message(message_id),
+            variant="ghost",
             class_name="hover:text-gray-700 cursor-pointer",
         ),
         rx.button(
             rx.icon("rotate-cw", size=14),
             on_click=lambda: ChatState.regenerate_message(message_id),
+            variant="ghost",
             class_name="hover:text-gray-700 cursor-pointer",
         ),
         class_name="flex gap-3 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity",
-    )
-
-
-def user_avatar(avatar_url: Optional[str]) -> rx.Component:
-    """User avatar image."""
-    return rx.cond(
-        avatar_url,
-        rx.image(
-            src=avatar_url,
-            alt="User",
-            class_name=[
-                "w-8 h-8 rounded-full border",
-                rx.color_mode_cond("border-gray-300", "border-gray-600"),
-            ],
-        ),
-        rx.box(
-            rx.icon("user", size=16),
-            class_name=[
-                "w-8 h-8 rounded-full flex items-center justify-center border",
-                rx.color_mode_cond(
-                    "bg-gray-100 text-gray-500 border-gray-300",
-                    "bg-gray-700 text-gray-400 border-gray-600",
-                ),
-            ],
-        ),
-    )
-
-
-def ai_avatar() -> rx.Component:
-    """AI assistant avatar."""
-    return rx.box(
-        rx.icon("sparkles", size=16),
-        class_name="w-8 h-8 rounded-full bg-blue-100 text-blue-500 flex items-center justify-center border border-blue-200",
     )
 
 
@@ -188,33 +158,45 @@ def message_bubble(message: Message, index: int) -> rx.Component:
     is_currently_streaming = is_last_message & ChatState.is_generating
 
     return rx.box(
-        # Avatar
-        rx.cond(
-            message.is_user,
-            user_avatar(message.avatar_url),
-            ai_avatar(),
-        ),
-        # Content
         rx.box(
-            # Header with timestamp and actions
+            # Header with author label and timestamp
             rx.box(
+                rx.text(
+                    rx.cond(message.is_user, "User", "Model"),
+                    class_name="font-semibold text-sm",
+                ),
                 rx.text(
                     message.timestamp_formatted,
                     class_name=[
-                        "text-xs font-medium",
-                        rx.color_mode_cond("text-gray-400", "text-gray-500"),
+                        "text-xs ml-2",
+                        rx.color_mode_cond("text-gray-500", "text-gray-400"),
                     ],
                 ),
-                message_actions(message.id),
-                class_name="flex items-center justify-between mb-1",
+                class_name="flex items-baseline mb-1",
             ),
-            # Message content: Pass streaming state to prevent Shiki flicker
+            # Message content
             rx.box(
                 _message_markdown(message.content, is_currently_streaming),
+                class_name="text-[15px]",
             ),
-            class_name="flex-1 min-w-0",  # Added min-w-0 to prevent flex overflow
+            # Actions and run-time footer
+            rx.box(
+                message_actions(message.id),
+                rx.cond(
+                    ~message.is_user,
+                    rx.text(
+                        "4.2s",  # Mock run-time for look and feel
+                        class_name="text-xs px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500 ml-auto",
+                    ),
+                ),
+                class_name="flex items-center justify-between mt-2",
+            ),
+            class_name="flex-1 min-w-0 flex flex-col",
         ),
-        class_name="flex gap-4 group max-w-4xl mx-auto w-full",
+        class_name=[
+            "flex group max-w-4xl mx-auto w-full px-4 py-6 rounded-2xl hover:bg-black/5 dark:hover:bg-white/5 transition-colors",
+            rx.color_mode_cond("text-gray-900", "text-gray-100"),
+        ],
     )
 
 
@@ -231,6 +213,7 @@ def model_selector() -> rx.Component:
                 rx.icon("sparkles", size=16, class_name="text-blue-500"),
                 rx.text(ChatState.model_display_name),
                 rx.icon("chevron-down", size=14, class_name="text-gray-400"),
+                variant="ghost",
                 class_name="flex items-center gap-2 text-gray-600 font-medium hover:text-gray-900 cursor-pointer",
             ),
         ),
@@ -387,6 +370,7 @@ def thinking_selector() -> rx.Component:
                     class_name="text-xs text-gray-400",
                 ),
                 rx.icon("chevron-down", size=14, class_name="text-gray-400"),
+                variant="ghost",
                 class_name="flex items-center gap-2 hover:text-orange-700 cursor-pointer",
             ),
         ),
@@ -482,6 +466,7 @@ def temperature_selector() -> rx.Component:
                     class_name="text-xs text-gray-400",
                 ),
                 rx.icon("chevron-down", size=14, class_name="text-gray-400"),
+                variant="ghost",
                 class_name="flex items-center gap-2 hover:text-blue-700 cursor-pointer",
             ),
         ),
@@ -547,19 +532,20 @@ def input_tools_right() -> rx.Component:
     return rx.box(
         rx.button(
             rx.icon("layout-grid", size=16),
-            class_name="w-8 h-8 rounded bg-gray-100 text-gray-500 hover:bg-gray-200 flex items-center justify-center cursor-pointer",
+            variant="ghost",
+            class_name="w-8 h-8 rounded-full bg-transparent text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700 flex items-center justify-center cursor-pointer transition",
         ),
         rx.button(
             rx.icon("plus", size=16),
-            class_name="w-8 h-8 rounded-full border border-gray-300 text-gray-500 hover:bg-gray-50 flex items-center justify-center cursor-pointer",
+            variant="outline",
+            class_name="w-8 h-8 rounded-full border border-gray-300 bg-white text-gray-500 hover:bg-gray-50 dark:border-gray-600 dark:bg-transparent dark:hover:bg-gray-700 flex items-center justify-center cursor-pointer transition",
         ),
         rx.button(
-            rx.text("Run"),
-            rx.icon("corner-down-left", size=12, class_name="text-gray-400"),
+            rx.icon("send", size=16),
             on_click=ChatState.handle_send_message,  # ARCHITECT FIX: Updated to new method name
-            class_name="border border-gray-300 rounded-lg px-4 py-1.5 text-gray-700 font-medium hover:bg-gray-50 flex items-center gap-2 cursor-pointer",
+            class_name="w-10 h-10 rounded-full bg-[#1967d2] text-white hover:bg-[#1557b0] flex items-center justify-center cursor-pointer shadow-md transition-transform active:scale-95 border-none",
         ),
-        class_name="flex items-center gap-3",
+        class_name="flex items-center gap-2",
     )
 
 
@@ -572,12 +558,13 @@ def chat_input() -> rx.Component:
                 placeholder="Start typing a prompt, use option + enter to append",
                 value=ChatState.input_text,
                 on_change=ChatState.set_input_text,
-                rows="2",
+                rows="1",
+                auto_height=True,
                 class_name=[
-                    "w-full resize-none outline-none bg-transparent border-0",
+                    "w-full resize-none outline-none bg-transparent border-0 focus:ring-0 px-2 py-3",
                     rx.color_mode_cond(
-                        "text-gray-700 placeholder-gray-400",
-                        "text-gray-200 placeholder-gray-500",
+                        "text-gray-800 placeholder-gray-500",
+                        "text-gray-200 placeholder-gray-400",
                     ),
                 ],
             ),
@@ -585,15 +572,12 @@ def chat_input() -> rx.Component:
             rx.box(
                 input_tools_left(),
                 input_tools_right(),
-                class_name=[
-                    "flex justify-between items-center mt-3 pt-2 border-t",
-                    rx.color_mode_cond("border-gray-100", "border-gray-700"),
-                ],
+                class_name="flex justify-between items-center mt-1 px-1",
             ),
             class_name=[
-                "max-w-4xl mx-auto rounded-2xl p-4 shadow-sm border focus-within:border-blue-400 focus-within:ring-1 focus-within:ring-blue-400 transition-all",
+                "max-w-4xl mx-auto rounded-3xl p-3 shadow-sm transition-all border-none focus-within:ring-2 focus-within:ring-[#1967d2]/20",
                 rx.color_mode_cond(
-                    "border-gray-300 bg-white", "border-gray-700 bg-gray-800"
+                    "bg-[#f0f4f9] hover:bg-[#e9eef6]", "bg-gray-800 hover:bg-gray-700"
                 ),
             ],
         ),
@@ -637,31 +621,42 @@ def global_search() -> rx.Component:
 
 
 def chat_header() -> rx.Component:
-    """Chat header with title and action buttons."""
+    """Chat header matching AI Studio toolbar."""
     return rx.box(
-        # Left side: title and edit button
+        # Left side: Menu toggle, title, token count
         rx.box(
+            rx.icon(
+                "menu",
+                size=20,
+                class_name="text-gray-500 mr-4 cursor-pointer hidden md:block",
+            ),
             rx.heading(
-                ChatState.current_chat_title,
+                "Playground",
                 class_name=[
-                    "text-lg font-semibold",
-                    rx.color_mode_cond("text-gray-800", "text-gray-100"),
+                    "text-[22px] font-normal",
+                    rx.color_mode_cond("text-gray-800", "text-gray-200"),
                 ],
             ),
-            rx.button(
-                rx.icon("pencil", size=14),
-                class_name="text-gray-400 hover:text-gray-600 cursor-pointer",
+            rx.box(
+                rx.text("159 tokens", class_name="text-xs font-medium"),
+                class_name=[
+                    "ml-4 px-3 py-1 rounded-full border cursor-help",
+                    rx.color_mode_cond(
+                        "bg-gray-100 border-gray-200 text-gray-600",
+                        "bg-gray-800 border-gray-700 text-gray-300",
+                    ),
+                ],
             ),
-            class_name="flex items-center gap-3",
+            class_name="flex items-center",
         ),
-        # Right side: action buttons + theme picker
+        # Right side: Theme picker + standard actions
         rx.box(
             rx.color_mode_cond(
                 rx.select(
                     list(LIGHT_CODE_THEMES),
                     value=ChatState.light_code_theme,
                     on_change=ChatState.set_light_code_theme,
-                    placeholder="Light code theme",
+                    placeholder="Light theme",
                     size="1",
                     class_name="text-xs",
                 ),
@@ -669,32 +664,45 @@ def chat_header() -> rx.Component:
                     list(DARK_CODE_THEMES),
                     value=ChatState.code_theme,
                     on_change=ChatState.set_code_theme,
-                    placeholder="Dark code theme",
+                    placeholder="Dark theme",
                     size="1",
                     class_name="text-xs",
                 ),
             ),
             rx.button(
-                rx.icon("boxes", size=16),
-                class_name="hover:text-gray-800 cursor-pointer",
+                rx.icon("pen-tool", size=18),
+                variant="ghost",
+                class_name="text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full w-10 h-10 cursor-pointer",
             ),
             rx.button(
-                rx.icon("plus", size=16),
-                class_name="hover:text-gray-800 cursor-pointer",
+                rx.icon("plus", size=18),
+                variant="ghost",
+                class_name="text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full w-10 h-10 cursor-pointer",
             ),
             rx.button(
-                rx.icon("ellipsis-vertical", size=16),
-                class_name="hover:text-gray-800 cursor-pointer",
+                rx.icon("more-vertical", size=18),
+                variant="ghost",
+                class_name="text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full w-10 h-10 cursor-pointer",
             ),
             rx.button(
-                rx.icon("sliders-horizontal", size=16),
-                class_name="hover:text-gray-800 cursor-pointer",
+                rx.icon("sliders-horizontal", size=18),
+                variant="ghost",
+                class_name=[
+                    "rounded-full w-10 h-10 cursor-pointer",
+                    rx.color_mode_cond(
+                        "text-blue-600 bg-blue-50 hover:bg-blue-100",
+                        "text-blue-300 bg-blue-900/30 hover:bg-blue-900/50",
+                    ),
+                ],
             ),
-            class_name="flex items-center gap-4 text-gray-500",
+            class_name="flex items-center gap-2",
         ),
         class_name=[
-            "px-8 py-4 border-b flex justify-between items-center",
-            rx.color_mode_cond("border-gray-300", "border-gray-700"),
+            "px-6 py-3 border-b flex justify-between items-center",
+            rx.color_mode_cond(
+                "border-gray-200 bg-white",
+                "border-gray-800 bg-[#1e1f20]",
+            ),
         ],
     )
 
