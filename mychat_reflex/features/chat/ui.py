@@ -49,8 +49,8 @@ DARK_CODE_THEMES = (
 
 DYNAMIC_CODE_THEME_CONFIG = {
     "mode": "dynamic-local-storage",
-    "light_storage_key": "light_code_theme_v2",
-    "dark_storage_key": "code_theme_v2",
+    "light_storage_key": "light_code_theme_v4",
+    "dark_storage_key": "code_theme_v4",
     "light_default": "github-light",
     "dark_default": "nord",
 }
@@ -225,10 +225,310 @@ def message_bubble(message: Message, index: int) -> rx.Component:
 
 def model_selector() -> rx.Component:
     """AI model selection dropdown."""
-    return rx.button(
-        rx.icon("sparkles", size=16, class_name="text-blue-500"),
-        rx.text(ChatState.selected_model),
-        class_name="flex items-center gap-2 text-gray-600 font-medium hover:text-gray-900 cursor-pointer",
+    return rx.popover.root(
+        rx.popover.trigger(
+            rx.button(
+                rx.icon("sparkles", size=16, class_name="text-blue-500"),
+                rx.text(ChatState.model_display_name),
+                rx.icon("chevron-down", size=14, class_name="text-gray-400"),
+                class_name="flex items-center gap-2 text-gray-600 font-medium hover:text-gray-900 cursor-pointer",
+            ),
+        ),
+        rx.popover.content(
+            rx.box(
+                rx.text(
+                    "Select Model",
+                    class_name="text-sm font-semibold text-gray-700 mb-2",
+                ),
+                # Anthropic models
+                rx.box(
+                    rx.text(
+                        "Anthropic",
+                        class_name="text-xs font-semibold text-gray-500 mb-1",
+                    ),
+                    rx.button(
+                        "Claude Sonnet 4.5",
+                        on_click=lambda: ChatState.set_selected_model(
+                            "claude-sonnet-4-5"
+                        ),
+                        class_name=[
+                            "w-full text-left px-3 py-2 rounded hover:bg-gray-100 text-sm",
+                            rx.cond(
+                                ChatState.selected_model == "claude-sonnet-4-5",
+                                "bg-blue-50 text-blue-700 font-medium",
+                                "text-gray-700",
+                            ),
+                        ],
+                    ),
+                    rx.button(
+                        "Claude Sonnet 4",
+                        on_click=lambda: ChatState.set_selected_model(
+                            "claude-sonnet-4"
+                        ),
+                        class_name=[
+                            "w-full text-left px-3 py-2 rounded hover:bg-gray-100 text-sm",
+                            rx.cond(
+                                ChatState.selected_model == "claude-sonnet-4",
+                                "bg-blue-50 text-blue-700 font-medium",
+                                "text-gray-700",
+                            ),
+                        ],
+                    ),
+                    rx.button(
+                        "Claude Opus 4",
+                        on_click=lambda: ChatState.set_selected_model("claude-opus-4"),
+                        class_name=[
+                            "w-full text-left px-3 py-2 rounded hover:bg-gray-100 text-sm",
+                            rx.cond(
+                                ChatState.selected_model == "claude-opus-4",
+                                "bg-blue-50 text-blue-700 font-medium",
+                                "text-gray-700",
+                            ),
+                        ],
+                    ),
+                    class_name="mb-3",
+                ),
+                # OpenAI models
+                rx.box(
+                    rx.text(
+                        "OpenAI",
+                        class_name="text-xs font-semibold text-gray-500 mb-1",
+                    ),
+                    rx.button(
+                        "GPT-4o",
+                        on_click=lambda: ChatState.set_selected_model("gpt-4o"),
+                        class_name=[
+                            "w-full text-left px-3 py-2 rounded hover:bg-gray-100 text-sm",
+                            rx.cond(
+                                ChatState.selected_model == "gpt-4o",
+                                "bg-blue-50 text-blue-700 font-medium",
+                                "text-gray-700",
+                            ),
+                        ],
+                    ),
+                    rx.button(
+                        "GPT-4o Mini",
+                        on_click=lambda: ChatState.set_selected_model("gpt-4o-mini"),
+                        class_name=[
+                            "w-full text-left px-3 py-2 rounded hover:bg-gray-100 text-sm",
+                            rx.cond(
+                                ChatState.selected_model == "gpt-4o-mini",
+                                "bg-blue-50 text-blue-700 font-medium",
+                                "text-gray-700",
+                            ),
+                        ],
+                    ),
+                    rx.button(
+                        "o1",
+                        on_click=lambda: ChatState.set_selected_model("o1"),
+                        class_name=[
+                            "w-full text-left px-3 py-2 rounded hover:bg-gray-100 text-sm",
+                            rx.cond(
+                                ChatState.selected_model == "o1",
+                                "bg-blue-50 text-blue-700 font-medium",
+                                "text-gray-700",
+                            ),
+                        ],
+                    ),
+                    rx.button(
+                        "o1 Mini",
+                        on_click=lambda: ChatState.set_selected_model("o1-mini"),
+                        class_name=[
+                            "w-full text-left px-3 py-2 rounded hover:bg-gray-100 text-sm",
+                            rx.cond(
+                                ChatState.selected_model == "o1-mini",
+                                "bg-blue-50 text-blue-700 font-medium",
+                                "text-gray-700",
+                            ),
+                        ],
+                    ),
+                ),
+                class_name="p-2",
+            ),
+            class_name="bg-white rounded-lg shadow-lg border border-gray-200 min-w-[200px]",
+        ),
+    )
+
+
+def thinking_selector() -> rx.Component:
+    """Thinking/reasoning level selector."""
+    return rx.popover.root(
+        rx.popover.trigger(
+            rx.button(
+                rx.icon(
+                    "brain",
+                    size=16,
+                    class_name=rx.cond(
+                        ChatState.enable_reasoning_bool,
+                        "text-orange-500",
+                        "text-gray-400",
+                    ),
+                ),
+                rx.text(
+                    "Think",
+                    class_name=rx.cond(
+                        ChatState.enable_reasoning_bool,
+                        "text-orange-600 font-medium",
+                        "text-gray-500",
+                    ),
+                ),
+                rx.text(
+                    rx.cond(
+                        ChatState.enable_reasoning_bool,
+                        rx.cond(
+                            ChatState.reasoning_budget_int >= 16000,
+                            "High",
+                            rx.cond(
+                                ChatState.reasoning_budget_int >= 2000, "Medium", "Low"
+                            ),
+                        ),
+                        "Off",
+                    ),
+                    class_name="text-xs text-gray-400",
+                ),
+                rx.icon("chevron-down", size=14, class_name="text-gray-400"),
+                class_name="flex items-center gap-2 hover:text-orange-700 cursor-pointer",
+            ),
+        ),
+        rx.popover.content(
+            rx.box(
+                rx.text(
+                    "Reasoning Mode",
+                    class_name="text-sm font-semibold text-gray-700 mb-3",
+                ),
+                # Toggle reasoning
+                rx.box(
+                    rx.switch(
+                        checked=ChatState.enable_reasoning_bool,
+                        on_change=ChatState.set_enable_reasoning,
+                    ),
+                    rx.text(
+                        "Enable Extended Thinking",
+                        class_name="text-sm text-gray-700",
+                    ),
+                    class_name="flex items-center gap-3 mb-3 pb-3 border-b border-gray-200",
+                ),
+                # Reasoning budget slider (only visible when enabled)
+                rx.cond(
+                    ChatState.enable_reasoning_bool,
+                    rx.box(
+                        rx.text(
+                            "Thinking Budget",
+                            class_name="text-xs font-semibold text-gray-500 mb-2",
+                        ),
+                        rx.button(
+                            "Low (2k tokens)",
+                            on_click=lambda: ChatState.set_reasoning_budget(2000),
+                            class_name=[
+                                "w-full text-left px-3 py-2 rounded hover:bg-gray-100 text-sm",
+                                rx.cond(
+                                    ChatState.reasoning_budget_int < 2000,
+                                    "bg-orange-50 text-orange-700 font-medium",
+                                    "text-gray-700",
+                                ),
+                            ],
+                        ),
+                        rx.button(
+                            "Medium (8k tokens)",
+                            on_click=lambda: ChatState.set_reasoning_budget(8000),
+                            class_name=[
+                                "w-full text-left px-3 py-2 rounded hover:bg-gray-100 text-sm",
+                                rx.cond(
+                                    (ChatState.reasoning_budget_int >= 2000)
+                                    & (ChatState.reasoning_budget_int < 16000),
+                                    "bg-orange-50 text-orange-700 font-medium",
+                                    "text-gray-700",
+                                ),
+                            ],
+                        ),
+                        rx.button(
+                            "High (16k+ tokens)",
+                            on_click=lambda: ChatState.set_reasoning_budget(16000),
+                            class_name=[
+                                "w-full text-left px-3 py-2 rounded hover:bg-gray-100 text-sm",
+                                rx.cond(
+                                    ChatState.reasoning_budget_int >= 16000,
+                                    "bg-orange-50 text-orange-700 font-medium",
+                                    "text-gray-700",
+                                ),
+                            ],
+                        ),
+                        rx.text(
+                            "Higher budgets allow deeper reasoning but cost more tokens.",
+                            class_name="text-xs text-gray-400 mt-2",
+                        ),
+                    ),
+                    rx.box(),  # Empty box when reasoning is disabled
+                ),
+                class_name="p-2",
+            ),
+            class_name="bg-white rounded-lg shadow-lg border border-gray-200 min-w-[250px]",
+        ),
+    )
+
+
+def temperature_selector() -> rx.Component:
+    """Temperature control slider."""
+    return rx.popover.root(
+        rx.popover.trigger(
+            rx.button(
+                rx.icon("thermometer", size=16, class_name="text-blue-500"),
+                rx.text(
+                    "Temp",
+                    class_name="text-blue-600 font-medium",
+                ),
+                rx.text(
+                    f"{ChatState.temperature:.1f}",
+                    class_name="text-xs text-gray-400",
+                ),
+                rx.icon("chevron-down", size=14, class_name="text-gray-400"),
+                class_name="flex items-center gap-2 hover:text-blue-700 cursor-pointer",
+            ),
+        ),
+        rx.popover.content(
+            rx.box(
+                rx.text(
+                    "Temperature",
+                    class_name="text-sm font-semibold text-gray-700 mb-2",
+                ),
+                rx.text(
+                    f"Current: {ChatState.temperature:.1f}",
+                    class_name="text-xs text-gray-500 mb-3",
+                ),
+                rx.slider(
+                    value=[ChatState.temperature],
+                    on_value_commit=lambda value: ChatState.set_temperature(value[0]),
+                    min=0.0,
+                    max=2.0,
+                    step=0.1,
+                    class_name="mb-3",
+                ),
+                rx.box(
+                    rx.button(
+                        "Precise (0.3)",
+                        on_click=lambda: ChatState.set_temperature(0.3),
+                        class_name="text-xs px-2 py-1 rounded hover:bg-gray-100",
+                    ),
+                    rx.button(
+                        "Balanced (0.7)",
+                        on_click=lambda: ChatState.set_temperature(0.7),
+                        class_name="text-xs px-2 py-1 rounded hover:bg-gray-100",
+                    ),
+                    rx.button(
+                        "Creative (1.2)",
+                        on_click=lambda: ChatState.set_temperature(1.2),
+                        class_name="text-xs px-2 py-1 rounded hover:bg-gray-100",
+                    ),
+                    class_name="flex gap-2",
+                ),
+                rx.text(
+                    "Lower = more focused, Higher = more creative",
+                    class_name="text-xs text-gray-400 mt-2",
+                ),
+                class_name="p-2",
+            ),
+            class_name="bg-white rounded-lg shadow-lg border border-gray-200 min-w-[250px]",
+        ),
     )
 
 
@@ -236,14 +536,8 @@ def input_tools_left() -> rx.Component:
     """Left side tools: model selector, think, temp."""
     return rx.box(
         model_selector(),
-        rx.button(
-            "Think",
-            class_name="text-orange-500 font-medium hover:text-orange-600 cursor-pointer",
-        ),
-        rx.button(
-            "Temp",
-            class_name="text-blue-500 font-medium hover:text-blue-600 cursor-pointer",
-        ),
+        thinking_selector(),
+        temperature_selector(),
         class_name="flex items-center gap-4",
     )
 

@@ -7,9 +7,11 @@ from dotenv import load_dotenv  # 1. ADD THIS IMPORT
 
 from .pages.main import main_page
 
-# 1. ADD THESE IMPORTS FOR DEPENDENCY INJECTION
+# 1. IMPORTS FOR DEPENDENCY INJECTION
 from .core.di import AppContainer
-from .infrastructure.llm_adapters import AnthropicAdapter
+from .infrastructure.llm_adapters import (
+    AnthropicAdapter,
+)  # Will also import OpenAI when needed
 
 # Configure root logger
 logging.basicConfig(
@@ -45,17 +47,27 @@ def initialize_dependencies():
     load_dotenv()
     logging.info("✅ Loaded environment variables from .env file.")
 
-    api_key = os.getenv("ANTHROPIC_API_KEY", "")
+    # Get API keys from environment
+    anthropic_key = os.getenv("ANTHROPIC_API_KEY", "")
+    openai_key = os.getenv("OPENAI_API_KEY", "")
 
-    if not api_key:
-        logging.error("❌ ANTHROPIC_API_KEY is missing from environment variables!")
+    # Default to Anthropic if available, otherwise OpenAI
+    if anthropic_key:
+        anthropic_adapter = AnthropicAdapter(
+            api_key=anthropic_key, model="claude-sonnet-4-5"
+        )
+        AppContainer.register_llm_service(anthropic_adapter)
+        logging.info("✅ Dependencies initialized with Anthropic adapter.")
+    elif openai_key:
+        from .infrastructure.llm_adapters import OpenAIAdapter
 
-    # Instantiate the concrete adapter
-    anthropic_adapter = AnthropicAdapter(api_key=api_key, model="claude-sonnet-4-5")
-
-    # Register it with the Service Locator
-    AppContainer.register_llm_service(anthropic_adapter)
-    logging.info("✅ Dependencies initialized and registered in AppContainer.")
+        openai_adapter = OpenAIAdapter(api_key=openai_key, model="gpt-4o")
+        AppContainer.register_llm_service(openai_adapter)
+        logging.info("✅ Dependencies initialized with OpenAI adapter.")
+    else:
+        logging.error(
+            "❌ No API keys found! Please set ANTHROPIC_API_KEY or OPENAI_API_KEY in .env"
+        )
 
 
 # 3. RUN THE INITIALIZATION
