@@ -534,104 +534,174 @@ def temperature_selector() -> rx.Component:
     )
 
 
+"""
+Pure-CSS chat input — no TOOLBAR_TRIGGER_BASE, no INPUT_ICON_BTN_BASE,
+no Tailwind utility stacks. Everything lives in one style= dict per element.
+Drop-in replacement for chat_input() and its two sub-components.
+"""
+
+# ── shared token dicts ────────────────────────────────────────────────────────
+
+_PILL_BTN = dict(
+    display="inline-flex",
+    align_items="center",
+    gap="6px",
+    height="32px",
+    padding="0 12px",
+    border_radius="9999px",
+    border="0.5px solid var(--color-border-secondary)",
+    background="transparent",
+    color="var(--color-text-primary)",
+    font_size="13px",
+    font_weight="500",
+    cursor="pointer",
+    white_space="nowrap",
+)
+
+_ICON_BTN = dict(
+    display="inline-flex",
+    align_items="center",
+    justify_content="center",
+    width="32px",
+    height="32px",
+    border_radius="9999px",
+    border="0.5px solid var(--color-border-secondary)",
+    background="transparent",
+    cursor="pointer",
+    padding="0",
+    flex_shrink="0",
+)
+
+
+# ── left toolbar ──────────────────────────────────────────────────────────────
+
 # ============================================================================
-# CHAT INPUT
+# CHAT INPUT TOOLBAR — token-aligned, no stray CSS vars
 # ============================================================================
+# Reuses TOOLBAR_TRIGGER_BASE/THEME and INPUT_ICON_BTN_BASE/THEME already
+# defined in your design tokens section. No new CSS variables introduced.
+
+
+# ============================================================================
+# CHAT INPUT TOOLBAR — token-aligned, no stray CSS vars
+# ============================================================================
+# Reuses TOOLBAR_TRIGGER_BASE/THEME and INPUT_ICON_BTN_BASE/THEME already
+# defined in your design tokens section. No new CSS variables introduced.
+
+
+def _icon_btn(icon: str, on_click=None) -> rx.Component:
+    """Circular outlined icon button — plain div, zero Radix interference."""
+    return rx.box(
+        rx.icon(icon, size=14),
+        on_click=on_click,
+        class_name=cls(
+            "h-8 w-8 rounded-full border flex items-center justify-center "
+            "flex-shrink-0 cursor-pointer transition-colors select-none",
+            cm(
+                "border-zinc-200 text-zinc-600 hover:bg-zinc-50",
+                "border-zinc-700 text-zinc-300 hover:bg-zinc-800",
+            ),
+        ),
+    )
+
+
+def _pill_btn(
+    *children,
+    on_click=None,
+    extra_class: str = "",
+) -> rx.Component:
+    """Outlined pill button — plain div, zero Radix interference."""
+    return rx.box(
+        *children,
+        on_click=on_click,
+        class_name=cls(
+            "h-8 px-3 rounded-full border flex items-center gap-1.5 "
+            "flex-shrink-0 cursor-pointer transition-colors select-none " + extra_class,
+            cm(
+                "border-zinc-200 text-zinc-700 hover:bg-zinc-50",
+                "border-zinc-700 text-zinc-300 hover:bg-zinc-800",
+            ),
+        ),
+    )
 
 
 def input_tools_left() -> rx.Component:
-    """Left side of the input toolbar matching the image."""
     return rx.box(
-        # Key icon button (light blue background)
-        rx.button(
-            rx.icon("key", size=15, class_name=cm("text-blue-700", "text-blue-300")),
-            variant="ghost",
+        # Key — square, blue tint
+        rx.box(
+            rx.icon("key", size=14, class_name=cm("text-blue-600", "text-blue-400")),
             class_name=cls(
-                "h-8 w-10 rounded-lg flex items-center justify-center transition-colors cursor-pointer",
+                "h-8 w-8 rounded-md flex items-center justify-center "
+                "flex-shrink-0 cursor-pointer transition-colors select-none",
                 cm(
-                    "bg-blue-100 hover:bg-blue-200",
-                    "bg-blue-900/30 hover:bg-blue-900/50",
+                    "bg-blue-50 hover:bg-blue-100",
+                    "bg-blue-900/20 hover:bg-blue-900/30",
                 ),
             ),
         ),
-        # Tools button (outlined pill)
-        rx.button(
-            rx.icon("layout-grid", size=15),
-            rx.text("Tools", class_name="font-medium"),
-            variant="ghost",
-            class_name=cls(TOOLBAR_TRIGGER_BASE, TOOLBAR_TRIGGER_THEME, "gap-2 px-3"),
+        # Tools pill
+        _pill_btn(
+            rx.icon("layout-grid", size=14, class_name="flex-shrink-0"),
+            rx.text("Tools", class_name="text-sm font-medium leading-none"),
         ),
-        class_name="flex items-center gap-2",
+        class_name="flex items-center gap-2 flex-shrink-0",
     )
 
 
 def input_tools_right() -> rx.Component:
     return rx.box(
-        # Mic icon (small circular outlined button)
-        rx.button(
-            rx.icon("mic", size=15),
-            variant="ghost",
-            class_name=cls(INPUT_ICON_BTN_BASE, INPUT_ICON_BTN_THEME),
-        ),
-        # Plus icon (small circular outlined button)
-        rx.button(
-            rx.icon("plus", size=15),
-            variant="ghost",
-            class_name=cls(INPUT_ICON_BTN_BASE, INPUT_ICON_BTN_THEME),
-        ),
-        # Run pill: "Run ⌘ ↵" — outlined pill with keyboard hint
-        rx.button(
-            rx.text("Run", class_name="font-medium"),
+        _icon_btn("mic"),
+        _icon_btn("plus"),
+        # Run pill — extra px for the shortcut text
+        _pill_btn(
+            rx.text("Run", class_name="text-sm font-medium leading-none"),
             rx.text(
                 "⌘ ↵",
-                class_name=cls(
-                    "text-xs",
-                    cm("text-zinc-400", "text-zinc-500"),
-                ),
+                class_name=cls("text-xs leading-none", TEXT_FAINT),
             ),
             on_click=ChatState.handle_send_message,
-            class_name=cls(TOOLBAR_TRIGGER_BASE, TOOLBAR_TRIGGER_THEME, "gap-2 px-4"),
+            extra_class="gap-2 px-3.5",
         ),
-        class_name="flex items-center gap-2",
+        class_name="flex items-center gap-2 flex-shrink-0",
     )
 
 
 def chat_input() -> rx.Component:
-    """Complete chat input area imitating a single cohesive box."""
     return rx.box(
         rx.box(
-            # Borderless text area
             rx.text_area(
                 placeholder="Start typing a prompt to see what our models can do",
                 value=ChatState.input_text,
                 on_change=ChatState.set_input_text,
-                rows="1",
+                rows="2",
                 auto_height=True,
                 class_name=cls(
                     "w-full resize-none outline-none bg-transparent border-0 "
-                    "focus:ring-0 px-3 py-4 text-[15px]",  # Increased vertical padding slightly
+                    "focus:ring-0 px-4 py-3.5 text-[15px] leading-relaxed",
                     TEXT_PRIMARY,
                     PLACEHOLDER,
                 ),
             ),
-            # Toolbar positioned at the bottom of the container
             rx.box(
                 input_tools_left(),
                 input_tools_right(),
-                class_name="flex justify-between items-center px-2 pb-2 pt-1",
+                class_name=cls(
+                    "flex justify-between items-center gap-4 px-2 py-1.5 border-t",
+                    BORDER_DIVIDER,
+                ),
             ),
-            # The outer container that provides the "input box" look
             class_name=cls(
-                "max-w-4xl mx-auto rounded-xl transition-all border shadow-sm",  # Adjusted rounding and added subtle shadow
+                "max-w-4xl mx-auto w-full rounded-xl border overflow-hidden "
+                "transition-all shadow-sm focus-within:ring-1",
                 cm(
                     "bg-white border-zinc-200 "
-                    "focus-within:border-zinc-300 focus-within:ring-1 focus-within:ring-zinc-200",
+                    "focus-within:border-zinc-300 focus-within:ring-zinc-200",
                     "bg-zinc-900 border-zinc-800 "
-                    "focus-within:border-zinc-700 focus-within:ring-1 focus-within:ring-zinc-700",
+                    "focus-within:border-zinc-700 focus-within:ring-zinc-700",
                 ),
             ),
         ),
-        class_name=cls("px-6 pb-6 pt-3 w-full", SURFACE_APP),
+        class_name=cls("px-6 pb-6 pt-2 w-full", SURFACE_APP),
     )
 
 
