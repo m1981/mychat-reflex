@@ -13,20 +13,61 @@ import reflex as rx
 from mychat_reflex.features.chat.state import ChatState
 
 
+# ============================================================================
+# THEME HELPERS
+# ============================================================================
+# We use `rx.color_mode_cond` for ALL theme-aware classes so the in-app
+# Reflex color-mode toggle works correctly. (Tailwind v4's default `dark:`
+# variant follows the OS preference, not Reflex's toggle.)
+
+
+def cm(light: str, dark: str):
+    """Pick a class string based on Reflex's current color mode."""
+    return rx.color_mode_cond(light, dark)
+
+
+def cls(*parts):
+    """Compose base class strings with conditional theme parts."""
+    return list(parts)
+
+
+# Shared theme tokens (kept aligned with chat/ui.py)
+SURFACE_SIDEBAR = cm("bg-zinc-50", "bg-zinc-950")
+SURFACE_HOVER_NAV = cm("hover:bg-zinc-200/60", "hover:bg-zinc-800")
+BORDER_DIVIDER = cm("border-zinc-200", "border-zinc-800")
+TEXT_PRIMARY = cm("text-zinc-900", "text-zinc-100")
+TEXT_SECONDARY = cm("text-zinc-700", "text-zinc-300")
+TEXT_HOVER = cm("hover:text-zinc-900", "hover:text-white")
+TEXT_LABEL = cm("text-zinc-500", "text-zinc-500")
+TEXT_ICON = cm("text-zinc-400", "text-zinc-500")
+
+NAV_ITEM_BASE = (
+    "w-full justify-start text-left bg-transparent rounded-lg "
+    "text-sm font-normal py-1.5 px-3 transition-colors cursor-pointer"
+)
+
+FOOTER_BTN_BASE = (
+    "flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm font-medium "
+    "cursor-pointer transition-colors"
+)
+
+
+# ============================================================================
+# COMPONENTS
+# ============================================================================
+
+
 def sidebar_header() -> rx.Component:
     """App logo and title."""
     return rx.box(
         rx.heading(
             "Super Chat",
-            class_name=[
-                "text-2xl font-bold tracking-wide",
-                rx.color_mode_cond("text-[#202124]", "text-gray-100"),
-            ],
+            class_name=cls(
+                "text-lg font-semibold tracking-tight",
+                TEXT_PRIMARY,
+            ),
         ),
-        class_name=[
-            "p-5 border-b",
-            rx.color_mode_cond("border-[#dadce0]", "border-gray-700"),
-        ],
+        class_name=cls("px-5 py-4 border-b", BORDER_DIVIDER),
     )
 
 
@@ -34,41 +75,54 @@ def action_buttons() -> rx.Component:
     """New chat and New folder buttons."""
     return rx.box(
         rx.button(
-            rx.icon("plus", size=16),
+            rx.icon("plus", size=15),
             rx.text("New chat"),
             on_click=ChatState.create_new_chat,
             variant="surface",
-            class_name="flex-1 flex justify-center items-center gap-2 bg-[#e8f0fe] text-[#1967d2] hover:bg-[#d2e3fc] dark:bg-blue-900/30 dark:text-blue-200 dark:hover:bg-blue-900/50 py-2 px-4 rounded-full text-sm font-medium transition cursor-pointer shadow-none border-none",
+            class_name=cls(
+                "flex-1 flex justify-center items-center gap-2 "
+                "py-2 px-4 rounded-full text-sm font-medium border-none shadow-none "
+                "text-white transition-colors cursor-pointer",
+                cm(
+                    "bg-indigo-600 hover:bg-indigo-700",
+                    "bg-indigo-500 hover:bg-indigo-400",
+                ),
+            ),
         ),
         rx.button(
-            rx.icon("folder-plus", size=16),
+            rx.icon("folder-plus", size=15),
             on_click=ChatState.create_new_folder,
             variant="ghost",
-            class_name="bg-white border border-[#dadce0] text-[#5f6368] hover:bg-[#f1f3f4] dark:bg-transparent dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800 p-2 rounded-full transition cursor-pointer shadow-sm",
+            class_name=cls(
+                "p-2 rounded-full border transition-colors cursor-pointer",
+                cm(
+                    "bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-100",
+                    "bg-transparent border-zinc-700 text-zinc-400 hover:bg-zinc-800",
+                ),
+            ),
         ),
-        class_name="p-4 flex gap-2 items-center",
+        class_name="px-4 py-3 flex gap-2 items-center",
     )
 
 
 def sidebar_search() -> rx.Component:
     """Search input for filtering chats."""
     return rx.box(
-        rx.box(
-            rx.input(
-                placeholder="Search",
-                value=ChatState.sidebar_search,
-                on_change=ChatState.set_sidebar_search,
-                class_name=[
-                    "w-full rounded-md py-1.5 px-3 text-sm border focus:outline-none focus:border-[#1967d2]",
-                    rx.color_mode_cond(
-                        "border-[#dadce0] bg-white text-[#202124] placeholder-[#5f6368]",
-                        "border-gray-600 bg-gray-800 text-gray-100 placeholder-gray-500",
-                    ),
-                ],
+        rx.input(
+            placeholder="Search",
+            value=ChatState.sidebar_search,
+            on_change=ChatState.set_sidebar_search,
+            class_name=cls(
+                "w-full rounded-lg py-1.5 px-3 text-sm border outline-none transition focus:ring-2",
+                cm(
+                    "bg-white border-zinc-200 text-zinc-900 placeholder-zinc-400 "
+                    "focus:border-indigo-400 focus:ring-indigo-100",
+                    "bg-zinc-900 border-zinc-800 text-zinc-100 placeholder-zinc-500 "
+                    "focus:border-indigo-500 focus:ring-indigo-500/10",
+                ),
             ),
-            class_name="relative",
         ),
-        class_name="px-4 mb-4",
+        class_name="px-4 mb-3",
     )
 
 
@@ -76,15 +130,16 @@ def chat_item(chat_id: str, chat_title: str) -> rx.Component:
     """Individual chat item in the navigation."""
     return rx.el.li(
         rx.button(
-            rx.icon(
-                "message-square",
-                size=14,
-                class_name="mr-2 text-[#5f6368] dark:text-gray-400",
-            ),
+            rx.icon("message-square", size=14, class_name=cls("mr-2", TEXT_ICON)),
             chat_title,
             on_click=lambda: ChatState.select_chat(chat_id),
             variant="ghost",
-            class_name="w-full justify-start text-left bg-transparent text-[#3c4043] hover:bg-[#e8eaed] hover:text-[#202124] dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white py-2 px-3 rounded-full text-sm font-medium transition-colors cursor-pointer",
+            class_name=cls(
+                NAV_ITEM_BASE,
+                TEXT_SECONDARY,
+                SURFACE_HOVER_NAV,
+                TEXT_HOVER,
+            ),
         ),
         class_name="list-none",
     )
@@ -95,7 +150,10 @@ def folder_section(folder_name: str, chats: list[tuple[str, str]]) -> rx.Compone
     return rx.box(
         rx.box(
             folder_name,
-            class_name="text-xs font-semibold text-[#5f6368] dark:text-gray-500 uppercase tracking-wider px-3 mb-2 mt-4",
+            class_name=cls(
+                "text-[11px] font-semibold uppercase tracking-wider px-3 mb-1.5 mt-3",
+                TEXT_LABEL,
+            ),
         ),
         rx.el.ul(
             *[chat_item(chat_id, chat_title) for chat_id, chat_title in chats],
@@ -107,7 +165,6 @@ def folder_section(folder_name: str, chats: list[tuple[str, str]]) -> rx.Compone
 def navigation_list() -> rx.Component:
     """Main navigation with folders and chats."""
     return rx.el.nav(
-        # Job offers folder
         folder_section(
             "Job offers",
             [
@@ -115,7 +172,6 @@ def navigation_list() -> rx.Component:
                 ("email-prep", "Email preparation"),
             ],
         ),
-        # ESP32 projects folder
         folder_section(
             "ESP32 projects",
             [
@@ -123,49 +179,42 @@ def navigation_list() -> rx.Component:
                 ("first-project", "First ESP project"),
             ],
         ),
-        class_name="flex-1 overflow-y-auto px-4 space-y-4",
+        class_name="flex-1 overflow-y-auto px-2 pb-4",
     )
 
 
 def sidebar_footer() -> rx.Component:
     """Settings and profile section."""
+    footer_btn_cls = cls(
+        FOOTER_BTN_BASE,
+        TEXT_SECONDARY,
+        SURFACE_HOVER_NAV,
+        TEXT_HOVER,
+    )
+
     return rx.box(
         rx.color_mode.button(size="2", cursor="pointer"),
         rx.button(
-            rx.icon("settings", class_name="text-lg"),
+            rx.icon("settings", size=16),
             rx.text("Settings"),
             variant="ghost",
-            class_name=[
-                "flex items-center gap-3 font-medium w-full cursor-pointer",
-                rx.color_mode_cond(
-                    "text-[#3c4043] hover:text-[#202124] hover:bg-[#f1f3f4]",
-                    "text-gray-300 hover:text-white",
-                ),
-            ],
+            class_name=footer_btn_cls,
         ),
         rx.button(
             rx.box(
-                class_name=[
+                class_name=cls(
                     "w-6 h-6 rounded-full border flex items-center justify-center",
-                    rx.color_mode_cond(
-                        "border-[#dadce0] bg-[#e8eaed]", "border-gray-600 bg-gray-700"
+                    cm(
+                        "border-zinc-200 bg-zinc-100",
+                        "border-zinc-700 bg-zinc-800",
                     ),
-                ],
+                ),
             ),
             rx.text("Michal"),
             variant="ghost",
-            class_name=[
-                "flex items-center gap-3 font-medium w-full cursor-pointer",
-                rx.color_mode_cond(
-                    "text-[#3c4043] hover:text-[#202124] hover:bg-[#f1f3f4]",
-                    "text-gray-300 hover:text-white",
-                ),
-            ],
+            class_name=footer_btn_cls,
         ),
-        class_name=[
-            "p-4 border-t space-y-4",
-            rx.color_mode_cond("border-[#dadce0]", "border-gray-700"),
-        ],
+        class_name=cls("px-3 py-3 border-t space-y-1", BORDER_DIVIDER),
     )
 
 
@@ -177,10 +226,9 @@ def sidebar() -> rx.Component:
         sidebar_search(),
         navigation_list(),
         sidebar_footer(),
-        class_name=[
-            "w-[280px] flex-shrink-0 border-r flex flex-col h-full",
-            rx.color_mode_cond(
-                "border-[#dadce0] bg-[#f8f9fa]", "border-gray-700 bg-[#1e1f20]"
-            ),
-        ],
+        class_name=cls(
+            "w-[260px] flex-shrink-0 flex flex-col h-full border-r",
+            SURFACE_SIDEBAR,
+            cm("border-zinc-200", "border-zinc-800"),
+        ),
     )
