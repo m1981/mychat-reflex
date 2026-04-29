@@ -1,22 +1,9 @@
-"""
-features/chat/ui.py
-
-Chat feature UI — message bubbles, input area, header, layout.
-
-Style rules:
-- Import T and primitives from ui.primitives — never write dark: inline here
-- rx.el.* for anything needing precise sizing
-- rx.popover / rx.switch / rx.select / rx.slider for behaviour only
-- ChatState is the only state import allowed in this file
-"""
-
 import reflex as rx
 from reflex.components.datadisplay.shiki_code_block import ShikiHighLevelCodeBlock
 
 from .state import ChatState
 from .models import Message
 from ...ui.primitives import T, pill_btn, icon_btn, icon_btn_square, popover
-
 
 # ============================================================================
 # CODE / MARKDOWN
@@ -71,16 +58,13 @@ def _fast_code_block(text, **props):
     return rx.el.pre(
         rx.el.code(text),
         class_name=(
-            "my-4 p-4 rounded-lg overflow-x-auto text-sm font-mono "
-            "bg-zinc-100 text-zinc-800 dark:bg-zinc-900 dark:text-zinc-200"
+            f"my-4 p-4 rounded-lg overflow-x-auto text-sm font-mono {T['code_block']}"
         ),
     )
 
 
 def _message_markdown(content: str, is_streaming: bool) -> rx.Component:
-    classes = (
-        "prose max-w-none leading-relaxed text-[15px] prose-zinc dark:prose-invert"
-    )
+    classes = f"prose max-w-none leading-relaxed text-[15px] {T['prose_body']}"
     return rx.cond(
         is_streaming,
         rx.markdown(
@@ -92,16 +76,10 @@ def _message_markdown(content: str, is_streaming: bool) -> rx.Component:
     )
 
 
-# ============================================================================
-# MESSAGE BUBBLE
-# ============================================================================
-
-
 def message_actions(message_id: str) -> rx.Component:
     btn_cls = (
-        "h-7 w-7 rounded-md flex items-center justify-center cursor-pointer "
-        "transition-colors text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 "
-        "dark:text-zinc-500 dark:hover:text-zinc-200 dark:hover:bg-zinc-800"
+        f"h-7 w-7 rounded-md flex items-center justify-center cursor-pointer "
+        f"transition-colors {T['btn_action']}"
     )
 
     def _btn(icon, on_click=None):
@@ -126,7 +104,6 @@ def message_bubble(message: Message, index: int) -> rx.Component:
 
     return rx.el.div(
         rx.el.div(
-            # Header
             rx.el.div(
                 rx.el.span(
                     rx.cond(message.is_user, "User", "Model"),
@@ -138,20 +115,14 @@ def message_bubble(message: Message, index: int) -> rx.Component:
                 ),
                 class_name="flex items-baseline gap-2 mb-1.5",
             ),
-            # Content
             _message_markdown(message.content, is_streaming),
-            # Footer
             rx.el.div(
                 message_actions(message.id),
                 rx.cond(
                     ~message.is_user,
                     rx.el.span(
                         "4.2s",
-                        class_name=(
-                            "ml-auto text-xs px-2 py-0.5 rounded-full "
-                            "bg-zinc-100 text-zinc-500 "
-                            "dark:bg-zinc-800 dark:text-zinc-400"
-                        ),
+                        class_name=f"ml-auto text-xs px-2 py-0.5 rounded-full {T['badge_muted']}",
                     ),
                 ),
                 class_name="flex items-center mt-3",
@@ -265,7 +236,7 @@ def thinking_selector() -> rx.Component:
             "Think",
             class_name=rx.cond(
                 enabled,
-                "text-sm font-medium text-amber-600 dark:text-amber-400",
+                f"text-sm font-medium {T['text_amber']}",
                 "text-sm font-medium",
             ),
         ),
@@ -372,20 +343,14 @@ def temperature_selector() -> rx.Component:
     return popover(trigger, content, min_width="260px")
 
 
-# ============================================================================
-# CHAT INPUT
-# ============================================================================
+# ... (Keep temperature_selector as is) ...
 
 
 def _input_left() -> rx.Component:
     return rx.el.div(
         icon_btn_square(
             "key",
-            extra=(
-                "text-blue-600 dark:text-blue-400 "
-                "bg-blue-50 hover:bg-blue-100 "
-                "dark:bg-blue-900/20 dark:hover:bg-blue-900/30"
-            ),
+            extra=T["btn_blue_tint"],
         ),
         pill_btn(
             rx.icon("layout-grid", size=14, class_name="flex-shrink-0"),
@@ -412,7 +377,6 @@ def _input_right() -> rx.Component:
 def chat_input() -> rx.Component:
     return rx.el.footer(
         rx.el.div(
-            # Textarea
             rx.text_area(
                 placeholder="Start typing a prompt to see what our models can do",
                 value=ChatState.input_text,
@@ -425,7 +389,6 @@ def chat_input() -> rx.Component:
                     f"{T['text_primary']} {T['placeholder']}"
                 ),
             ),
-            # Toolbar
             rx.el.div(
                 _input_left(),
                 _input_right(),
@@ -435,32 +398,22 @@ def chat_input() -> rx.Component:
                 ),
             ),
             class_name=(
-                "max-w-4xl mx-auto w-full rounded-xl border overflow-hidden "
-                "transition-all shadow-sm focus-within:ring-1 "
-                "bg-white border-zinc-200 "
-                "focus-within:border-zinc-300 focus-within:ring-zinc-200 "
-                "dark:bg-zinc-900 dark:border-zinc-800 "
-                "dark:focus-within:border-zinc-700 dark:focus-within:ring-zinc-700"
+                f"max-w-4xl mx-auto w-full rounded-xl border overflow-hidden "
+                f"transition-all shadow-sm focus-within:ring-1 {T['input_wrapper']}"
             ),
         ),
         class_name=f"px-6 pb-6 pt-2 w-full {T['surface_app']}",
     )
 
 
-# ============================================================================
-# HEADER
-# ============================================================================
-
-
 def chat_header() -> rx.Component:
     icon_cls = (
-        "h-9 w-9 rounded-full flex items-center justify-center "
-        "cursor-pointer transition-colors "
+        f"h-9 w-9 rounded-full flex items-center justify-center "
+        f"cursor-pointer transition-colors "
         f"{T['text_secondary']} {T['surface_hover']}"
     )
 
     return rx.el.header(
-        # Left
         rx.el.div(
             rx.icon(
                 "menu",
@@ -473,32 +426,33 @@ def chat_header() -> rx.Component:
             rx.el.div(
                 rx.el.span("159 tokens", class_name="text-xs font-medium"),
                 class_name=(
-                    "ml-3 px-2.5 py-0.5 rounded-full border cursor-help "
-                    "bg-zinc-100 border-zinc-200 text-zinc-600 "
-                    "dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-400"
+                    f"ml-3 px-2.5 py-0.5 rounded-full border cursor-help {T['badge_outline']}"
                 ),
             ),
             class_name="flex items-center",
         ),
-        # Right
         rx.el.div(
-            rx.color_mode_cond(
+            # 1. LIGHT THEME SELECTOR (Hidden in dark mode)
+            rx.el.div(
                 rx.select(
                     list(LIGHT_CODE_THEMES),
                     value=ChatState.light_code_theme,
                     on_change=ChatState.set_light_code_theme,
                     placeholder="Light theme",
                     size="1",
-                    class_name="text-xs",
                 ),
+                class_name="block dark:hidden",
+            ),
+            # 2. DARK THEME SELECTOR (Hidden in light mode)
+            rx.el.div(
                 rx.select(
                     list(DARK_CODE_THEMES),
                     value=ChatState.code_theme,
                     on_change=ChatState.set_code_theme,
                     placeholder="Dark theme",
                     size="1",
-                    class_name="text-xs",
                 ),
+                class_name="hidden dark:block",
             ),
             rx.el.button(rx.icon("pen-tool", size=17), class_name=icon_cls),
             rx.el.button(rx.icon("plus", size=17), class_name=icon_cls),
@@ -534,13 +488,8 @@ def global_search() -> rx.Component:
                 value=ChatState.sidebar_search,
                 on_change=ChatState.set_sidebar_search,
                 class_name=(
-                    "w-full rounded-full py-1.5 pl-9 pr-4 text-sm border outline-none "
-                    "transition focus:ring-2 "
-                    "bg-white border-zinc-200 text-zinc-900 placeholder-zinc-400 "
-                    "focus:border-indigo-400 focus:ring-indigo-100 "
-                    "dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-100 "
-                    "dark:placeholder-zinc-500 dark:focus:border-indigo-500 "
-                    "dark:focus:ring-indigo-500/10"
+                    f"w-full rounded-full py-1.5 pl-9 pr-4 text-sm border outline-none "
+                    f"transition focus:ring-2 {T['input_search']}"
                 ),
             ),
             class_name="relative w-full max-w-2xl",

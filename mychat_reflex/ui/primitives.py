@@ -105,6 +105,42 @@ T: dict[str, str] = {
         "text-sm font-semibold mb-2 px-1 text-zinc-800 dark:text-zinc-200"
     ),
     "popover_hint": ("text-xs mt-2 px-1 text-zinc-500 dark:text-zinc-500"),
+    # ── Layout & Surfaces ─────────────────────────────────────────────────────
+    "sidebar_root": "bg-zinc-50 dark:bg-zinc-950",
+    "input_wrapper": (
+        "bg-white border-zinc-200 focus-within:border-zinc-300 focus-within:ring-zinc-200 "
+        "dark:bg-zinc-900 dark:border-zinc-800 dark:focus-within:border-zinc-700 dark:focus-within:ring-zinc-700"
+    ),
+    # ── Buttons ───────────────────────────────────────────────────────────────
+    "btn_primary": (
+        "bg-indigo-600 hover:bg-indigo-700 text-white "
+        "dark:bg-indigo-500 dark:hover:bg-indigo-400"
+    ),
+    "btn_ghost_square": (
+        "bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-100 "
+        "dark:bg-transparent dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800"
+    ),
+    "btn_action": (
+        "text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 "
+        "dark:text-zinc-500 dark:hover:text-zinc-200 dark:hover:bg-zinc-800"
+    ),
+    "btn_blue_tint": (
+        "text-blue-600 bg-blue-50 hover:bg-blue-100 "
+        "dark:text-blue-400 dark:bg-blue-900/20 dark:hover:bg-blue-900/30"
+    ),
+    # ── Badges & Avatars ──────────────────────────────────────────────────────
+    "avatar_circle": "border-zinc-200 bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800",
+    "badge_muted": "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400",
+    "badge_outline": "bg-zinc-100 border-zinc-200 text-zinc-600 dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-400",
+    # ── Typography & Markdown ─────────────────────────────────────────────────
+    "text_amber": "text-amber-600 dark:text-amber-400",
+    "prose_body": "prose-zinc dark:prose-invert",
+    "code_block": "bg-zinc-100 text-zinc-800 dark:bg-zinc-900 dark:text-zinc-200",
+    # ── Specific Inputs ───────────────────────────────────────────────────────
+    "input_search": (
+        "bg-white border-zinc-200 text-zinc-900 placeholder-zinc-400 focus:border-indigo-400 focus:ring-indigo-100 "
+        "dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-100 dark:placeholder-zinc-500 dark:focus:border-indigo-500 dark:focus:ring-indigo-500/10"
+    ),
 }
 
 

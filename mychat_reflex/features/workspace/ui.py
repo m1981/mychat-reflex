@@ -1,25 +1,8 @@
-"""
-features/workspace/ui.py
-
-Left sidebar — folder navigation, chat list, footer actions.
-
-Style rules:
-- Import T and primitives from ui.primitives only
-- rx.el.* everywhere, zero rx.button / rx.box
-- WorkspaceState owns sidebar_search and folder state (Phase 4 target)
-  For now ChatState is used under the FIXME note below
-"""
-
 import reflex as rx
 
 # FIXME (Phase 4): extract WorkspaceState, remove this import
 from mychat_reflex.features.chat.state import ChatState
-from ...ui.primitives import T, nav_item, footer_btn
-
-
-# ============================================================================
-# SIDEBAR HEADER
-# ============================================================================
+from ...ui.primitives import T, nav_item, footer_btn, text_input
 
 
 def sidebar_header() -> rx.Component:
@@ -32,11 +15,6 @@ def sidebar_header() -> rx.Component:
     )
 
 
-# ============================================================================
-# ACTION BUTTONS
-# ============================================================================
-
-
 def action_buttons() -> rx.Component:
     return rx.el.div(
         # New chat — filled indigo pill
@@ -45,11 +23,9 @@ def action_buttons() -> rx.Component:
             rx.el.span("New chat"),
             on_click=ChatState.create_new_chat,
             class_name=(
-                "flex-1 flex justify-center items-center gap-2 "
-                "py-2 px-4 rounded-full text-sm font-medium "
-                "text-white cursor-pointer transition-colors "
-                "bg-indigo-600 hover:bg-indigo-700 "
-                "dark:bg-indigo-500 dark:hover:bg-indigo-400"
+                f"flex-1 flex justify-center items-center gap-2 "
+                f"py-2 px-4 rounded-full text-sm font-medium "
+                f"cursor-pointer transition-colors {T['btn_primary']}"
             ),
         ),
         # New folder — ghost square
@@ -57,44 +33,22 @@ def action_buttons() -> rx.Component:
             rx.icon("folder-plus", size=15),
             on_click=ChatState.create_new_folder,
             class_name=(
-                "p-2 rounded-full border cursor-pointer transition-colors "
-                "bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-100 "
-                "dark:bg-transparent dark:border-zinc-700 "
-                "dark:text-zinc-400 dark:hover:bg-zinc-800"
+                f"p-2 rounded-full border cursor-pointer transition-colors {T['btn_ghost_square']}"
             ),
         ),
         class_name="px-4 py-3 flex gap-2 items-center",
     )
 
 
-# ============================================================================
-# SEARCH
-# ============================================================================
-
-
 def sidebar_search() -> rx.Component:
     return rx.el.div(
-        rx.el.input(
+        text_input(
             placeholder="Search",
             value=ChatState.sidebar_search,
             on_change=ChatState.set_sidebar_search,
-            class_name=(
-                "w-full rounded-lg py-1.5 px-3 text-sm border outline-none "
-                "transition focus:ring-2 "
-                "bg-white border-zinc-200 text-zinc-900 placeholder-zinc-400 "
-                "focus:border-indigo-400 focus:ring-indigo-100 "
-                "dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-100 "
-                "dark:placeholder-zinc-500 dark:focus:border-indigo-500 "
-                "dark:focus:ring-indigo-500/10"
-            ),
         ),
         class_name="px-4 mb-3",
     )
-
-
-# ============================================================================
-# NAVIGATION
-# ============================================================================
 
 
 def chat_item(chat_id: str, chat_title: str) -> rx.Component:
@@ -148,37 +102,23 @@ def navigation_list() -> rx.Component:
     )
 
 
-# ============================================================================
-# FOOTER
-# ============================================================================
-
-
 def sidebar_footer() -> rx.Component:
     return rx.el.div(
-        # Dark mode toggle (Radix built-in, no styling needed)
         rx.color_mode.button(size="2", cursor="pointer"),
         footer_btn(
             rx.icon("settings", size=16),
             rx.el.span("Settings"),
         ),
         footer_btn(
-            # Avatar circle
             rx.el.div(
                 class_name=(
-                    "w-6 h-6 rounded-full border flex items-center justify-center "
-                    "border-zinc-200 bg-zinc-100 "
-                    "dark:border-zinc-700 dark:bg-zinc-800"
+                    f"w-6 h-6 rounded-full border flex items-center justify-center {T['avatar_circle']}"
                 ),
             ),
             rx.el.span("Michal"),
         ),
         class_name=f"px-3 py-3 border-t space-y-1 {T['border_divider']}",
     )
-
-
-# ============================================================================
-# SIDEBAR ROOT
-# ============================================================================
 
 
 def sidebar() -> rx.Component:
@@ -189,8 +129,7 @@ def sidebar() -> rx.Component:
         navigation_list(),
         sidebar_footer(),
         class_name=(
-            "w-[260px] flex-shrink-0 flex flex-col h-full border-r "
-            "bg-zinc-50 dark:bg-zinc-950 "
-            "border-zinc-200 dark:border-zinc-800"
+            f"w-[260px] flex-shrink-0 flex flex-col h-full border-r "
+            f"{T['sidebar_root']} {T['border']}"
         ),
     )
