@@ -116,13 +116,25 @@ POPOVER_TITLE_THEME = cm("text-zinc-800", "text-zinc-200")
 POPOVER_HINT = "text-xs mt-2 px-1"
 POPOVER_HINT_THEME = cm("text-zinc-500", "text-zinc-500")
 
+# Outlined pill button used in the chat input toolbar (Model / Think / Temp,
+# mirrors the AI-Studio "Tools" / "Run" pill style).
 TOOLBAR_TRIGGER_BASE = (
-    "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium "
+    "flex items-center gap-1.5 h-8 px-3 rounded-full border text-sm font-medium "
     "transition-colors cursor-pointer"
 )
 TOOLBAR_TRIGGER_THEME = cm(
-    "text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100",
-    "text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800",
+    "bg-white border-zinc-200 text-zinc-700 hover:bg-zinc-50 hover:border-zinc-300",
+    "bg-zinc-900 border-zinc-700 text-zinc-300 hover:bg-zinc-800 hover:border-zinc-600",
+)
+
+# Small circular outlined icon button (mic / + in the reference).
+INPUT_ICON_BTN_BASE = (
+    "h-8 w-8 rounded-full border flex items-center justify-center "
+    "transition-colors cursor-pointer"
+)
+INPUT_ICON_BTN_THEME = cm(
+    "bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-50 hover:border-zinc-300",
+    "bg-zinc-900 border-zinc-700 text-zinc-300 hover:bg-zinc-800 hover:border-zinc-600",
 )
 
 
@@ -528,74 +540,98 @@ def temperature_selector() -> rx.Component:
 
 
 def input_tools_left() -> rx.Component:
+    """Left side of the input toolbar matching the image."""
     return rx.box(
-        model_selector(),
-        thinking_selector(),
-        temperature_selector(),
-        class_name="flex items-center gap-1",
+        # Key icon button (light blue background)
+        rx.button(
+            rx.icon("key", size=15, class_name=cm("text-blue-700", "text-blue-300")),
+            variant="ghost",
+            class_name=cls(
+                "h-8 w-10 rounded-lg flex items-center justify-center transition-colors cursor-pointer",
+                cm(
+                    "bg-blue-100 hover:bg-blue-200",
+                    "bg-blue-900/30 hover:bg-blue-900/50",
+                ),
+            ),
+        ),
+        # Tools button (outlined pill)
+        rx.button(
+            rx.icon("layout-grid", size=15),
+            rx.text("Tools", class_name="font-medium"),
+            variant="ghost",
+            class_name=cls(TOOLBAR_TRIGGER_BASE, TOOLBAR_TRIGGER_THEME, "gap-2 px-3"),
+        ),
+        class_name="flex items-center gap-2",
     )
 
 
 def input_tools_right() -> rx.Component:
     return rx.box(
+        # Mic icon (small circular outlined button)
         rx.button(
-            rx.icon("layout-grid", size=16),
+            rx.icon("mic", size=15),
             variant="ghost",
-            class_name=cls(ICON_BTN_BASE, ICON_BTN_THEME),
+            class_name=cls(INPUT_ICON_BTN_BASE, INPUT_ICON_BTN_THEME),
         ),
+        # Plus icon (small circular outlined button)
         rx.button(
-            rx.icon("plus", size=16),
-            variant="outline",
-            class_name=cls(ICON_BTN_BASE, ICON_BTN_THEME, "border", BORDER),
+            rx.icon("plus", size=15),
+            variant="ghost",
+            class_name=cls(INPUT_ICON_BTN_BASE, INPUT_ICON_BTN_THEME),
         ),
+        # Run pill: "Run ⌘ ↵" — outlined pill with keyboard hint
         rx.button(
-            rx.icon("send", size=16),
-            on_click=ChatState.handle_send_message,
-            class_name=(
-                "h-10 w-10 rounded-full flex items-center justify-center "
-                "bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm "
-                "active:scale-95 transition cursor-pointer"
+            rx.text("Run", class_name="font-medium"),
+            rx.text(
+                "⌘ ↵",
+                class_name=cls(
+                    "text-xs",
+                    cm("text-zinc-400", "text-zinc-500"),
+                ),
             ),
+            on_click=ChatState.handle_send_message,
+            class_name=cls(TOOLBAR_TRIGGER_BASE, TOOLBAR_TRIGGER_THEME, "gap-2 px-4"),
         ),
-        class_name="flex items-center gap-1",
+        class_name="flex items-center gap-2",
     )
 
 
 def chat_input() -> rx.Component:
-    """Complete chat input area with textarea and tools."""
+    """Complete chat input area imitating a single cohesive box."""
     return rx.box(
         rx.box(
+            # Borderless text area
             rx.text_area(
-                placeholder="Start typing a prompt, use option + enter to append",
+                placeholder="Start typing a prompt to see what our models can do",
                 value=ChatState.input_text,
                 on_change=ChatState.set_input_text,
                 rows="1",
                 auto_height=True,
                 class_name=cls(
                     "w-full resize-none outline-none bg-transparent border-0 "
-                    "focus:ring-0 px-3 py-3 text-[15px]",
+                    "focus:ring-0 px-3 py-4 text-[15px]",  # Increased vertical padding slightly
                     TEXT_PRIMARY,
                     PLACEHOLDER,
                 ),
             ),
+            # Toolbar positioned at the bottom of the container
             rx.box(
                 input_tools_left(),
                 input_tools_right(),
-                class_name="flex justify-between items-center px-2 pb-1",
+                class_name="flex justify-between items-center px-2 pb-2 pt-1",
             ),
+            # The outer container that provides the "input box" look
             class_name=cls(
-                "max-w-3xl mx-auto rounded-2xl px-3 pt-2 pb-1 transition-all border",
+                "max-w-4xl mx-auto rounded-xl transition-all border shadow-sm",  # Adjusted rounding and added subtle shadow
                 cm(
-                    "bg-zinc-50 border-zinc-200 "
-                    "focus-within:border-indigo-400 focus-within:ring-2 "
-                    "focus-within:ring-indigo-100",
+                    "bg-white border-zinc-200 "
+                    "focus-within:border-zinc-300 focus-within:ring-1 focus-within:ring-zinc-200",
                     "bg-zinc-900 border-zinc-800 "
-                    "focus-within:border-indigo-500 focus-within:ring-2 "
-                    "focus-within:ring-indigo-500/10",
+                    "focus-within:border-zinc-700 focus-within:ring-1 focus-within:ring-zinc-700",
                 ),
             ),
         ),
-        class_name=cls("px-6 pb-6 pt-3", SURFACE_APP),
+        class_name=cls("px-6 pb-6 pt-3 w-full", SURFACE_APP),
     )
 
 
