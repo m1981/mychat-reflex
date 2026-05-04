@@ -1,3 +1,14 @@
+# 02 — Data and Domain
+
+> **Cross-references**
+> - DB schema reference: [`doc/3-reference/database-schema.md`](../3-reference/database-schema.md) — singular table names (`message`, `conversation`, `chatfolder`), live FKs, recommended indexes.
+> - Models: `mychat_reflex/features/chat/models.py` (`Message`, `Conversation`, `ChatFolder`).
+> - Use cases: `mychat_reflex/features/chat/use_cases.py` (`SendMessageUseCase` = Command, `LoadHistoryUseCase` = Query).
+> - Migrations: `alembic/versions/da92f255a8fe_.py` (baseline).
+> - Sibling ADRs: [`01-core-architecture.md`](01-core-architecture.md) · [`03-llm-and-integrations.md`](03-llm-and-integrations.md) · [`04-presentation-and-api.md`](04-presentation-and-api.md) · [`05-testing-and-qa.md`](05-testing-and-qa.md)
+
+---
+
 ## ADR 004: Command Query Separation (CQS) over Full CQRS
 **Status:** Accepted
 
@@ -11,6 +22,12 @@ Given the scale (single-user hobby project, 500MB data), full CQRS is rejected d
 *   **Positive:** Eliminates the infrastructure cost and eventual-consistency bugs of an event bus.
 *   **Positive:** SQLite FTS5 or standard SQLAlchemy queries are more than fast enough for 500MB of data.
 *   **Negative:** If the app scales to millions of users, the single SQLite database will become a bottleneck (acceptable tradeoff for current scope).
+
+### Related
+- Command: `SendMessageUseCase` — orchestrates side effects (LLM stream + DB writes via caller).
+- Query: `LoadHistoryUseCase` — pure read, takes injected `Session`.
+- Both live in `mychat_reflex/features/chat/use_cases.py`.
+- See architecture doc §8.
 
 ---
 
@@ -28,6 +45,12 @@ We will adopt a **Pragmatic Compromise**. We will use Reflex's `rx.Model` (which
 *   **Positive:** LLM Agents can easily understand the data flow without getting lost in mapping functions.
 *   **Negative:** The Domain layer is technically "polluted" by the Reflex framework (`rx.Model`).
 
+### Related
+- All three models in `mychat_reflex/features/chat/models.py` use `rx.Model` (SQLModel under the hood).
+- Timestamps use `Field(default_factory=lambda: datetime.now(timezone.utc))` — see DB schema doc §1 for the rationale (avoids the `datetime.utcnow()` class-definition-time evaluation bug).
+- Tested in: `tests/features/chat/test_models.py`.
+- Tension with strict Clean Architecture (ADR 012) — accepted compromise.
+
 ## ADR 009: Polymorphic Message Content for Multimodal Edge Cases
 **Status:** Accepted
 
@@ -43,3 +66,8 @@ We will define polymorphic domain entities: `TextPart`, `ImagePart`, and `Docume
 ### Consequences
 *   **Positive:** The frontend and Use Cases only deal with a standard `ImagePart(base64, mime_type)`.
 *   **Negative:** Adapters become slightly more complex, requiring type-checking (`isinstance(part, ImagePart)`) during payload construction.
+
+### Related
+- **Status note**: NOT YET IMPLEMENTED. Today `Message.content: str` (plain text only). See product spec §16 "Known Gaps" for the multimodal roadmap.
+- When implemented, this will live alongside `Message` in `mychat_reflex/features/chat/models.py` and the Anthropic/OpenAI/Gemini adapters in `mychat_reflex/infrastructure/llm_adapters.py`.
+- Related: ADR 010 (system-prompt resolution) for similar adapter-side normalisation.

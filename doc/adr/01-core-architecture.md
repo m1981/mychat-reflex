@@ -1,3 +1,12 @@
+# 01 — Core Architecture
+
+> **Cross-references**
+> - Architecture overview: [`doc/2-architecture/reflex-monolith-architecture.md`](../2-architecture/reflex-monolith-architecture.md) — implements ADRs 001, 011, 012, 015 in code.
+> - Code: `mychat_reflex/features/` (slices), `mychat_reflex/core/` (ports + DI), `mychat_reflex/infrastructure/` (adapters), `mychat_reflex/mychat_reflex.py` (composition root).
+> - Sibling ADRs: [`02-data-and-domain.md`](02-data-and-domain.md) · [`03-llm-and-integrations.md`](03-llm-and-integrations.md) · [`04-presentation-and-api.md`](04-presentation-and-api.md) · [`05-testing-and-qa.md`](05-testing-and-qa.md)
+
+---
+
 ## ADR 001: Vertical Slice Architecture (Screaming Architecture)
 **Status:** Accepted
 
@@ -9,6 +18,10 @@ We will use **Vertical Slice Architecture**. The directory structure will "screa
 
 ### Consequences
 *   **Positive:** High cohesion. If the "Notes" feature changes, only the `knowledge_base` directory is touched.
+
+### Related
+- Implementation: `mychat_reflex/features/{chat,workspace,knowledge_base}/` — see architecture doc §2.
+- Reinforced by ADR 011 (Reflex Monolith) and ADR 012 (Hexagonal).
 
 ***
 
@@ -26,6 +39,11 @@ We will drop FastAPI entirely and use **Reflex as a Full-Stack Monolith**. The `
 *   **Positive:** Eliminates the HTTP/Network tax. Development speed is drastically increased.
 *   **Positive:** We retain Vertical Slice Architecture (Screaming Architecture) while utilizing Reflex's native strengths.
 *   **Negative:** The application is now tightly coupled to the Reflex framework. Extracting the backend to a mobile app later will require re-introducing an API layer.
+
+### Related
+- Implementation: `mychat_reflex/mychat_reflex.py` (composition root + `rx.App`), `mychat_reflex/pages/main.py`.
+- See architecture doc §10 "Composition Root".
+- Conflicts with hypothetical FastAPI/SSE design — explicitly retired by ADR 002-V2 and ADR 006-V2.
 
 ---
 
@@ -47,6 +65,12 @@ We will adopt **Hexagonal Architecture** (also known as Ports and Adapters) for 
 *   **Positive:** Protects the core application from breaking changes in third-party SDKs.
 *   **Negative:** Introduces boilerplate. Developers must write Interfaces and map data between Infrastructure models (SQLAlchemy) and Domain models (Pydantic/Dataclasses).
 
+### Related
+- Port: `mychat_reflex/core/llm_ports.py` (`ILLMService`, `LLMConfig`, `Role`).
+- Adapters: `mychat_reflex/infrastructure/llm_adapters.py` (`AnthropicAdapter`, `OpenAIAdapter`).
+- Boilerplate is partially mitigated by ADR 005-V2 (`rx.Model` unifies DB + domain + UI).
+- DI mechanism: ADR 015.
+
 ---
 ## ADR 015: Dependency Injection via Service Locator in Reflex State (NEW)
 **Status:** Accepted
@@ -61,5 +85,12 @@ We will implement a lightweight **Service Locator / DI Container** pattern. A ce
 *   **Positive:** Preserves Hexagonal Architecture. The Reflex State remains decoupled from concrete Infrastructure adapters.
 *   **Positive:** Allows us to easily swap out the `AppContainer` configuration during testing to inject Fakes.
 *   **Negative:** Service Locator is sometimes considered an anti-pattern compared to pure constructor injection, but it is a necessary pragmatic compromise when working with framework-managed lifecycles like `rx.State`.
+
+### Related
+- Container: `mychat_reflex/core/di.py` (`AppContainer.register_llm_service` / `resolve_llm_service` / `clear`).
+- Wiring: `mychat_reflex/mychat_reflex.py:initialize_dependencies()`.
+- Runtime swapping: `ChatState._ensure_correct_adapter()` re-registers an adapter when the user changes model family.
+- Tested in: `tests/core/test_di.py`.
+- See architecture doc §4.2 and §10.
 
 ***
