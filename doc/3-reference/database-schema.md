@@ -1,179 +1,200 @@
 # Database Schema Reference
 
-**Database**: SQLite (via Reflex rx.Model)
-**ORM**: SQLAlchemy (managed by Reflex)
-**Migration Tool**: Alembic (via `reflex db migrate`)
-**Last Updated**: 2026-04-12
+**Database**: SQLite (via Reflex `rx.Model` / SQLModel)
+**ORM**: SQLModel + SQLAlchemy (managed by Reflex)
+**Migration Tool**: Alembic (revision `da92f255a8fe` is the current baseline)
+**Last Updated**: 2026-05-04
+
+> **⚠ Reading this document**
+> Every SQL block here is **descriptive of the live schema produced by Alembic**, not a hand-written DDL contract. The authoritative source is `alembic/versions/da92f255a8fe_.py`. If they disagree, the migration wins — please open a PR to update this file.
 
 ---
 
 ## Schema Overview
 
-```sql
--- Tables managed by Reflex rx.Model
-conversations
-messages
-chat_folders
-reflex_user (Reflex internal)
+SQLModel (which Reflex uses under the hood for `rx.Model`) generates **singular, lower-case, no-underscore** table names by default. The actual tables in `reflex.db` are:
+
 ```
+chatfolder        -- Folders that group conversations
+conversation      -- Chat conversations (aggregate root)
+message           -- Individual chat messages
+alembic_version   -- Alembic bookkeeping
+```
+
+There is **no** `reflex_user` table in this project (no auth yet).
 
 ---
 
-## 1. conversations
+## 1. `conversation`
 
-**Purpose**: Stores chat conversation metadata
+**Purpose**: Stores chat conversation metadata.
+
+**Live schema (from migration `da92f255a8fe`)**:
 
 ```sql
-CREATE TABLE conversations (
-    id TEXT PRIMARY KEY,
-    title TEXT NOT NULL DEFAULT 'New Chat',
-    folder_id TEXT,  -- FK to chat_folders.id (nullable)
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (folder_id) REFERENCES chat_folders(id) ON DELETE SET NULL
+CREATE TABLE conversation (
+    id          VARCHAR NOT NULL,
+    title       VARCHAR NOT NULL,
+    folder_id   VARCHAR,                  -- nullable FK to chatfolder.id
+    created_at  DATETIME NOT NULL,
+    updated_at  DATETIME NOT NULL,
+    PRIMARY KEY (id),
+    FOREIGN KEY (folder_id) REFERENCES chatfolder(id)
 );
-
-CREATE INDEX idx_conversations_folder_id ON conversations(folder_id);
-CREATE INDEX idx_conversations_created_at ON conversations(created_at DESC);
 ```
 
 **Columns**:
-- `id` (TEXT, PK): UUID or unique identifier
-- `title` (TEXT): Display name for conversation (e.g., "ESP32 Overview")
-- `folder_id` (TEXT, FK, nullable): Reference to parent folder
-- `created_at` (TIMESTAMP): Creation timestamp
-- `updated_at` (TIMESTAMP): Last message timestamp
+- `id` (VARCHAR, PK): UUID4 string generated in application code (`uuid4()` in `ChatState.create_new_chat`).
+- `title` (VARCHAR, NOT NULL): Display name. Application default is `"New Chat"`.
+- `folder_id` (VARCHAR, FK, nullable): Reference to `chatfolder.id`.
+- `created_at` (DATETIME, NOT NULL): Set in Python via `default_factory=lambda: datetime.now(timezone.utc)`.
+- `updated_at` (DATETIME, NOT NULL): Same default; bumped in `ChatState.handle_send_message` after each AI reply.
 
 **Relationships**:
-- Has many `messages` (one-to-many via `conversation_id`)
-- Belongs to one `chat_folders` (optional, many-to-one via `folder_id`)
+- Has many `message` rows (one-to-many via `message.conversation_id`).
+- Belongs to zero or one `chatfolder` (many-to-one via `folder_id`).
 
-**Business Rules**:
-- Deleting a conversation deletes all its messages (cascade)
-- Deleting a folder sets `folder_id` to NULL (not cascade)
-- Default title is "New Chat" (can be auto-generated from first message)
+**Cascade behaviour**:
+- The migration declares plain foreign keys with **no `ON DELETE` rules**. Cascading on conversation/folder deletion is **not** enforced at the DB level today — it must be handled in application code, or added in a future migration.
 
-**rx.Model Definition**:
+**`rx.Model` definition** (`mychat_reflex/features/chat/models.py`):
 ```python
 class Conversation(rx.Model, table=True):
-    id: str
+    id: str = Field(primary_key=True)
     title: str = "New Chat"
-    folder_id: Optional[str] = None
-    created_at: datetime = datetime.utcnow()
-    updated_at: datetime = datetime.utcnow()
+    folder_id: Optional[str] = Field(default=None, foreign_key="chatfolder.id")
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    @property
+    def is_in_folder(self) -> bool:
+        return self.folder_id is not None
 ```
+
+> **Note on `default_factory`**: the older pattern `created_at: datetime = datetime.utcnow()` evaluates **once at class-definition time**, so every row would get the same timestamp. `default_factory=lambda: datetime.now(timezone.utc)` evaluates per-insert and is timezone-aware.
 
 ---
 
-## 2. messages
+## 2. `message`
 
-**Purpose**: Stores individual chat messages (user and assistant turns)
+**Purpose**: Stores individual chat messages (user, assistant, or system turns).
+
+**Live schema**:
 
 ```sql
-CREATE TABLE messages (
-    id TEXT PRIMARY KEY,
-    conversation_id TEXT NOT NULL,
-    role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
-    content TEXT NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    model_used TEXT,  -- e.g., "claude-sonnet-4-5", "gpt-4o"
-    avatar_url TEXT,  -- Optional user avatar
-    FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+CREATE TABLE message (
+    id              VARCHAR NOT NULL,
+    conversation_id VARCHAR NOT NULL,
+    role            VARCHAR NOT NULL,    -- "user" | "assistant" | "system" (enforced in app)
+    content         VARCHAR NOT NULL,
+    created_at      DATETIME NOT NULL,
+    model_used      VARCHAR,             -- e.g., "claude-sonnet-4-5", "gpt-4o"
+    avatar_url      VARCHAR,
+    PRIMARY KEY (id),
+    FOREIGN KEY (conversation_id) REFERENCES conversation(id)
 );
-
-CREATE INDEX idx_messages_conversation_id ON messages(conversation_id);
-CREATE INDEX idx_messages_created_at ON messages(created_at);
-CREATE INDEX idx_messages_role ON messages(role);
 ```
 
 **Columns**:
-- `id` (TEXT, PK): UUID
-- `conversation_id` (TEXT, FK): Parent conversation
-- `role` (TEXT, CHECK): "user" | "assistant" | "system"
-- `content` (TEXT): Message text (simplified string-only for MVP)
-- `created_at` (TIMESTAMP): Message timestamp
-- `model_used` (TEXT, nullable): Which LLM generated this (assistant only)
-- `avatar_url` (TEXT, nullable): User profile picture URL
+- `id` (VARCHAR, PK): UUID4 string (`uuid4()` in `ChatState`).
+- `conversation_id` (VARCHAR, FK, NOT NULL): Parent conversation.
+- `role` (VARCHAR, NOT NULL): One of `"user"`, `"assistant"`, `"system"`. **Validation lives in application code only** — there is no DB-level CHECK constraint.
+- `content` (VARCHAR, NOT NULL): Plain text. The UI renders it as Markdown with Shiki code-highlighting (see `features/chat/ui.py`), but the DB only sees a string.
+- `created_at` (DATETIME, NOT NULL): App-side default (`datetime.now(timezone.utc)`).
+- `model_used` (VARCHAR, nullable): LLM identifier for assistant messages; `NULL` for user/system messages.
+- `avatar_url` (VARCHAR, nullable): User profile picture URL (assistant uses an icon, not this column).
 
 **Relationships**:
-- Belongs to one `conversations` (many-to-one via `conversation_id`)
+- Belongs to one `conversation` (many-to-one via `conversation_id`).
 
-**Business Rules**:
-- `role` must be "user", "assistant", or "system"
-- User messages have `model_used = NULL`
-- Assistant messages should have `model_used` populated
-- Messages are ordered by `created_at` within a conversation
-- Deleting a conversation deletes all messages (cascade)
+**Business rules** (enforced in application layer):
+- `role` ∈ {`user`, `assistant`, `system`}.
+- User messages have `model_used = NULL`.
+- Assistant messages should populate `model_used`.
+- Messages are ordered by `created_at` within a conversation.
 
-**rx.Model Definition**:
+**`rx.Model` definition**:
 ```python
 class Message(rx.Model, table=True):
-    id: str
-    conversation_id: str
-    role: str  # "user" | "assistant" | "system"
+    id: str = Field(primary_key=True)
+    conversation_id: str = Field(foreign_key="conversation.id")
+    role: str
     content: str
-    created_at: datetime = datetime.utcnow()
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     model_used: Optional[str] = None
     avatar_url: Optional[str] = None
+
+    @property
+    def is_user(self) -> bool: return self.role == "user"
+
+    @property
+    def is_assistant(self) -> bool: return self.role == "assistant"
+
+    @property
+    def timestamp_formatted(self) -> str:
+        return self.created_at.strftime("%I:%M %p %d %b %Y")
 ```
 
 ---
 
-## 3. chat_folders
+## 3. `chatfolder`
 
-**Purpose**: Organizational folders for grouping conversations
+**Purpose**: Organizational folders for grouping conversations.
+
+**Live schema**:
 
 ```sql
-CREATE TABLE chat_folders (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE chatfolder (
+    id          VARCHAR NOT NULL,
+    name        VARCHAR NOT NULL,
+    created_at  DATETIME NOT NULL,
+    PRIMARY KEY (id)
 );
-
-CREATE INDEX idx_chat_folders_name ON chat_folders(name);
 ```
 
 **Columns**:
-- `id` (TEXT, PK): UUID
-- `name` (TEXT): Folder display name (e.g., "Job offers", "ESP32 projects")
-- `created_at` (TIMESTAMP): Folder creation time
+- `id` (VARCHAR, PK): UUID4 string.
+- `name` (VARCHAR, NOT NULL): Folder display name (e.g., "Job offers", "ESP32 projects").
+- `created_at` (DATETIME, NOT NULL): App-side `default_factory`.
 
 **Relationships**:
-- Has many `conversations` (one-to-many via `conversations.folder_id`)
+- Has many `conversation` rows (one-to-many via `conversation.folder_id`).
 
-**Business Rules**:
-- Folder names should be unique (enforced in application layer, not DB constraint)
-- Deleting a folder sets `conversations.folder_id` to NULL (does NOT delete conversations)
-- Empty folders are allowed
+**Business rules**:
+- Folder name uniqueness is **not** enforced (no unique constraint). If desired, enforce it in application code or add a migration.
+- Empty folders are allowed.
+- Deleting a folder with conversations attached: today the FK has no `ON DELETE` rule, so SQLite will refuse the delete unless `folder_id`s are first NULLed by the application.
 
-**rx.Model Definition**:
+**`rx.Model` definition**:
 ```python
 class ChatFolder(rx.Model, table=True):
-    id: str
+    id: str = Field(primary_key=True)
     name: str
-    created_at: datetime = datetime.utcnow()
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 ```
+
+> **Location note**: All three models (`Message`, `Conversation`, `ChatFolder`) currently live in `features/chat/models.py`. The architecture doc previously suggested moving `ChatFolder` to `features/workspace/models.py` — this has **not** happened and is tracked as future work.
 
 ---
 
 ## 4. Entity Relationship Diagram
 
 ```
-chat_folders (1) ────────────── (0..N) conversations (1) ────────────── (0..N) messages
-    id                                      id                                    id
-    name                                    title                                 conversation_id (FK)
-    created_at                              folder_id (FK)                        role
-                                           created_at                            content
-                                           updated_at                            created_at
-                                                                                 model_used
-                                                                                 avatar_url
+chatfolder (1) ──────── (0..N) conversation (1) ──────── (0..N) message
+    id                              id                            id
+    name                            title                         conversation_id (FK)
+    created_at                      folder_id (FK, nullable)      role
+                                    created_at                    content
+                                    updated_at                    created_at
+                                                                  model_used
+                                                                  avatar_url
 ```
 
 **Cardinality**:
-- One folder can have many conversations (0..N)
-- One conversation belongs to zero or one folder (0..1)
-- One conversation has many messages (1..N)
-- One message belongs to exactly one conversation (1)
+- One folder → many conversations (0..N).
+- One conversation → zero or one folder (0..1).
+- One conversation → many messages (0..N — a brand-new chat starts empty).
+- One message → exactly one conversation (1).
 
 ---
 
@@ -181,194 +202,180 @@ chat_folders (1) ────────────── (0..N) conversations
 
 ```sql
 -- Sample folders
-INSERT INTO chat_folders (id, name, created_at) VALUES
-('folder-1', 'Job offers', '2026-04-01 10:00:00'),
+INSERT INTO chatfolder (id, name, created_at) VALUES
+('folder-1', 'Job offers',     '2026-04-01 10:00:00'),
 ('folder-2', 'ESP32 projects', '2026-04-01 10:00:00');
 
 -- Sample conversations
-INSERT INTO conversations (id, title, folder_id, created_at, updated_at) VALUES
-('conv-1', 'CV update', 'folder-1', '2026-04-10 09:00:00', '2026-04-10 09:15:00'),
+INSERT INTO conversation (id, title, folder_id, created_at, updated_at) VALUES
+('conv-1', 'CV update',      'folder-1', '2026-04-10 09:00:00', '2026-04-10 09:15:00'),
 ('conv-2', 'ESP32 overview', 'folder-2', '2026-04-12 14:00:00', '2026-04-12 14:30:00');
 
 -- Sample messages
-INSERT INTO messages (id, conversation_id, role, content, created_at, model_used) VALUES
-('msg-1', 'conv-2', 'user', 'What is ESP32?', '2026-04-12 14:00:00', NULL),
-('msg-2', 'conv-2', 'assistant', 'ESP32 is a low-cost microcontroller...', '2026-04-12 14:00:05', 'claude-sonnet-4-5');
+INSERT INTO message (id, conversation_id, role, content, created_at, model_used) VALUES
+('msg-1', 'conv-2', 'user',      'What is ESP32?',                       '2026-04-12 14:00:00', NULL),
+('msg-2', 'conv-2', 'assistant', 'ESP32 is a low-cost microcontroller…', '2026-04-12 14:00:05', 'claude-sonnet-4-5');
 ```
 
 ---
 
-## 6. Migration Commands
+## 6. Migration Workflow
+
+This project uses **Alembic directly** (`alembic.ini` at repo root, revisions in `alembic/versions/`).
 
 ```bash
-# Initialize Reflex database
-reflex db init
+# Create a new revision after changing rx.Model classes
+alembic revision --autogenerate -m "describe the change"
 
-# Create migration after model changes
-reflex db migrate --message "Add Message and Conversation models"
+# Apply migrations to the local SQLite DB
+alembic upgrade head
 
-# Apply migrations
-reflex db migrate
+# Inspect current revision
+alembic current
 
-# Check migration status
-reflex db status
-
-# Rollback last migration
-reflex db downgrade -1
+# Roll back one step
+alembic downgrade -1
 ```
+
+Reflex also exposes thin wrappers (`reflex db makemigrations`, `reflex db migrate`) which call the same Alembic machinery; either is fine.
+
+**Current baseline**: revision `da92f255a8fe` ("empty message", 2026-04-13). It is the only revision and it creates `chatfolder`, `conversation`, and `message`. There are no follow-up migrations yet.
 
 ---
 
-## 7. Query Patterns
+## 7. Common Query Patterns
 
 ### Get conversation with messages
 ```python
+from sqlmodel import select
+from mychat_reflex.features.chat.models import Conversation, Message
+
 with rx.session() as session:
-    conversation = session.query(Conversation).filter(Conversation.id == conv_id).first()
-    messages = session.query(Message).filter(
-        Message.conversation_id == conv_id
-    ).order_by(Message.created_at).all()
+    conversation = session.get(Conversation, conv_id)
+    messages = session.exec(
+        select(Message)
+        .where(Message.conversation_id == conv_id)
+        .order_by(Message.created_at)
+    ).all()
 ```
 
 ### Get conversations in folder
 ```python
 with rx.session() as session:
-    conversations = session.query(Conversation).filter(
-        Conversation.folder_id == folder_id
-    ).order_by(Conversation.updated_at.desc()).all()
+    conversations = session.exec(
+        select(Conversation)
+        .where(Conversation.folder_id == folder_id)
+        .order_by(Conversation.updated_at.desc())
+    ).all()
 ```
 
-### Get all folders with conversation count
+### Get all folders
 ```python
 with rx.session() as session:
-    folders = session.query(ChatFolder).all()
-    # Count conversations per folder in application code
+    folders = session.exec(select(ChatFolder)).all()
 ```
+
+> **The codebase uses modern SQLModel `select()` syntax** (see `LoadHistoryUseCase.execute`). Avoid the legacy `session.query(...)` style in new code.
 
 ---
 
-## 8. Advanced Query Patterns
+## 8. Advanced Query Patterns (recipes — not yet wired into features)
 
-### 8.1 Get Recent Conversations with Last Message
+The patterns below are **reference snippets**. Most of them are not currently used by the app; treat them as templates for upcoming features (sidebar previews, search, stats, batch ops).
 
-**Scenario**: Display sidebar with conversation titles and previews
+### 8.1 Recent Conversations with Last-Message Preview
 
 ```python
 from sqlalchemy import func
+from sqlmodel import select
 from mychat_reflex.features.chat.models import Conversation, Message
 
 def get_recent_conversations_with_preview(limit: int = 20):
-    """
-    Get recent conversations with their last message text.
-
-    Returns list of dicts: {conversation: Conversation, last_message: str, message_count: int}
-    """
     with rx.session() as session:
-        # Get conversations ordered by updated_at
-        conversations = session.query(Conversation).order_by(
-            Conversation.updated_at.desc()
-        ).limit(limit).all()
+        conversations = session.exec(
+            select(Conversation)
+            .order_by(Conversation.updated_at.desc())
+            .limit(limit)
+        ).all()
 
         results = []
         for conv in conversations:
-            # Get last message for preview
-            last_msg = session.query(Message).filter(
-                Message.conversation_id == conv.id
-            ).order_by(Message.created_at.desc()).first()
+            last_msg = session.exec(
+                select(Message)
+                .where(Message.conversation_id == conv.id)
+                .order_by(Message.created_at.desc())
+                .limit(1)
+            ).first()
 
-            # Get message count
-            count = session.query(func.count(Message.id)).filter(
-                Message.conversation_id == conv.id
-            ).scalar()
+            count = session.exec(
+                select(func.count(Message.id))
+                .where(Message.conversation_id == conv.id)
+            ).one()
 
             results.append({
                 "conversation": conv,
-                "last_message": last_msg.content[:50] + "..." if last_msg else "",
-                "message_count": count
+                "last_message": (last_msg.content[:50] + "…") if last_msg else "",
+                "message_count": count,
             })
 
-        session.expunge_all()  # Detach from session
+        session.expunge_all()
         return results
 ```
 
 ### 8.2 Search Messages by Content
 
-**Scenario**: Global search across all conversations
-
 ```python
 def search_messages(query: str, limit: int = 50):
-    """
-    Full-text search across all messages.
-
-    Note: SQLite FTS (Full-Text Search) would be better for production.
-    This is a simple LIKE query for MVP.
-    """
     with rx.session() as session:
-        messages = session.query(Message).filter(
-            Message.content.like(f"%{query}%")
-        ).order_by(Message.created_at.desc()).limit(limit).all()
-
-        session.expunge_all()
-        return messages
+        return session.exec(
+            select(Message)
+            .where(Message.content.like(f"%{query}%"))
+            .order_by(Message.created_at.desc())
+            .limit(limit)
+        ).all()
 ```
 
-**Future: SQLite FTS5 Integration**
-```sql
--- Create virtual table for full-text search
-CREATE VIRTUAL TABLE messages_fts USING fts5(
-    id UNINDEXED,
-    content,
-    content=messages,
-    content_rowid=rowid
-);
+> For production, consider SQLite FTS5 (virtual table + triggers) or moving to PostgreSQL with `tsvector`.
 
--- Triggers to keep FTS in sync
-CREATE TRIGGER messages_ai AFTER INSERT ON messages BEGIN
-  INSERT INTO messages_fts(rowid, content) VALUES (new.rowid, new.content);
-END;
-
--- Search query
-SELECT * FROM messages_fts WHERE content MATCH 'ESP32' ORDER BY rank;
-```
-
-### 8.3 Get Conversation Statistics
+### 8.3 Conversation Statistics
 
 ```python
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 def get_conversation_stats(conversation_id: str):
-    """Get detailed statistics for a conversation."""
     with rx.session() as session:
-        # Total messages
-        total = session.query(func.count(Message.id)).filter(
-            Message.conversation_id == conversation_id
-        ).scalar()
+        total = session.exec(
+            select(func.count(Message.id))
+            .where(Message.conversation_id == conversation_id)
+        ).one()
 
-        # User vs AI message counts
-        user_count = session.query(func.count(Message.id)).filter(
-            Message.conversation_id == conversation_id,
-            Message.role == "user"
-        ).scalar()
+        user_count = session.exec(
+            select(func.count(Message.id))
+            .where(Message.conversation_id == conversation_id,
+                   Message.role == "user")
+        ).one()
 
-        ai_count = session.query(func.count(Message.id)).filter(
-            Message.conversation_id == conversation_id,
-            Message.role == "assistant"
-        ).scalar()
+        ai_count = session.exec(
+            select(func.count(Message.id))
+            .where(Message.conversation_id == conversation_id,
+                   Message.role == "assistant")
+        ).one()
 
-        # First and last message timestamps
-        first_msg = session.query(Message).filter(
-            Message.conversation_id == conversation_id
-        ).order_by(Message.created_at).first()
+        first_msg = session.exec(
+            select(Message)
+            .where(Message.conversation_id == conversation_id)
+            .order_by(Message.created_at)
+            .limit(1)
+        ).first()
 
-        last_msg = session.query(Message).filter(
-            Message.conversation_id == conversation_id
-        ).order_by(Message.created_at.desc()).first()
+        last_msg = session.exec(
+            select(Message)
+            .where(Message.conversation_id == conversation_id)
+            .order_by(Message.created_at.desc())
+            .limit(1)
+        ).first()
 
-        # Calculate duration
-        if first_msg and last_msg:
-            duration = last_msg.created_at - first_msg.created_at
-        else:
-            duration = timedelta(0)
+        duration = (last_msg.created_at - first_msg.created_at) if (first_msg and last_msg) else timedelta(0)
 
         return {
             "total_messages": total,
@@ -377,195 +384,98 @@ def get_conversation_stats(conversation_id: str):
             "first_message_at": first_msg.created_at if first_msg else None,
             "last_message_at": last_msg.created_at if last_msg else None,
             "duration": duration,
-            "messages_per_hour": total / (duration.total_seconds() / 3600) if duration.total_seconds() > 0 else 0
         }
 ```
 
 ### 8.4 Batch Operations
 
-**Scenario**: Delete old conversations
-
 ```python
 def delete_old_conversations(days_old: int = 90):
-    """
-    Delete conversations older than X days.
-
-    Messages will be cascade-deleted due to FK constraint.
-    """
-    cutoff_date = datetime.utcnow() - timedelta(days=days_old)
-
+    """Delete conversations older than X days. Messages are NOT cascade-deleted today —
+    you must delete them explicitly (or add an ON DELETE CASCADE migration first)."""
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days_old)
     with rx.session() as session:
-        deleted = session.query(Conversation).filter(
-            Conversation.updated_at < cutoff_date
-        ).delete()
+        old_ids = [c.id for c in session.exec(
+            select(Conversation).where(Conversation.updated_at < cutoff)
+        ).all()]
 
+        session.exec(
+            Message.__table__.delete().where(Message.conversation_id.in_(old_ids))
+        )
+        session.exec(
+            Conversation.__table__.delete().where(Conversation.id.in_(old_ids))
+        )
         session.commit()
-        return deleted
-```
+        return len(old_ids)
 
-**Scenario**: Move conversations to folder
 
-```python
 def move_conversations_to_folder(conversation_ids: list[str], folder_id: str):
-    """Bulk move conversations to a folder."""
     with rx.session() as session:
-        session.query(Conversation).filter(
-            Conversation.id.in_(conversation_ids)
-        ).update({"folder_id": folder_id}, synchronize_session=False)
-
+        for conv in session.exec(
+            select(Conversation).where(Conversation.id.in_(conversation_ids))
+        ).all():
+            conv.folder_id = folder_id
         session.commit()
 ```
 
 ---
 
-## 9. Database Optimization Strategies
+## 9. Optimisation Strategies (forward-looking)
 
 ### 9.1 Index Strategy
 
-**Current Indexes** (from schema above):
-```sql
--- Conversations
-CREATE INDEX idx_conversations_folder_id ON conversations(folder_id);
-CREATE INDEX idx_conversations_created_at ON conversations(created_at DESC);
+**Current state**: the `da92f255a8fe` migration creates **only primary keys and foreign keys** — no secondary indexes. SQLite implicitly indexes PKs and (in modern versions) FKs, but range/order queries on `created_at` are full scans.
 
--- Messages
-CREATE INDEX idx_messages_conversation_id ON messages(conversation_id);
-CREATE INDEX idx_messages_created_at ON messages(created_at);
-CREATE INDEX idx_messages_role ON messages(role);
+**Recommended next migration** when usage grows:
+
+```sql
+CREATE INDEX idx_conversation_folder_id        ON conversation(folder_id);
+CREATE INDEX idx_conversation_updated_at       ON conversation(updated_at DESC);
+CREATE INDEX idx_message_conversation_created  ON message(conversation_id, created_at);
+CREATE INDEX idx_message_role                  ON message(role);
 ```
 
-**Additional Indexes for Production**:
-```sql
--- Composite index for common query pattern
-CREATE INDEX idx_messages_conv_created ON messages(conversation_id, created_at);
-
--- For search functionality
-CREATE INDEX idx_messages_content_partial ON messages(content COLLATE NOCASE);
-
--- For filtering by model
-CREATE INDEX idx_messages_model ON messages(model_used) WHERE model_used IS NOT NULL;
+Generate it via:
+```bash
+alembic revision -m "add hot-path indexes"
+# then hand-write op.create_index(...) calls
+alembic upgrade head
 ```
 
-**Index Maintenance**:
-```sql
--- Analyze query performance
-EXPLAIN QUERY PLAN
-SELECT * FROM messages WHERE conversation_id = 'conv-1' ORDER BY created_at;
+### 9.2 Query Optimisation Patterns
 
--- Rebuild indexes (SQLite auto-maintains, rarely needed)
-REINDEX;
-
--- Analyze table statistics
-ANALYZE;
-```
-
-### 9.2 Query Optimization Patterns
-
-**❌ Bad: N+1 Query Problem**
+**❌ N+1 antipattern**:
 ```python
-# Don't do this! Causes N+1 queries
-conversations = session.query(Conversation).all()
+conversations = session.exec(select(Conversation)).all()
 for conv in conversations:
-    # Each iteration = 1 additional query!
-    messages = session.query(Message).filter(
-        Message.conversation_id == conv.id
-    ).all()
+    msgs = session.exec(select(Message).where(Message.conversation_id == conv.id)).all()
 ```
 
-**✅ Good: Eager Loading**
-```python
-from sqlalchemy.orm import joinedload
-
-# Load conversations with messages in ONE query
-conversations = session.query(Conversation).options(
-    joinedload(Conversation.messages)
-).all()
-```
-
-**✅ Better: Pagination**
+**✅ Pagination** (current recommended pattern for `LoadHistoryUseCase` extensions):
 ```python
 def get_messages_paginated(conversation_id: str, page: int = 1, page_size: int = 50):
-    """Load messages in pages to reduce memory usage."""
     offset = (page - 1) * page_size
-
     with rx.session() as session:
-        messages = session.query(Message).filter(
-            Message.conversation_id == conversation_id
-        ).order_by(Message.created_at).offset(offset).limit(page_size).all()
-
-        session.expunge_all()
-        return messages
+        return session.exec(
+            select(Message)
+            .where(Message.conversation_id == conversation_id)
+            .order_by(Message.created_at)
+            .offset(offset).limit(page_size)
+        ).all()
 ```
 
 ### 9.3 Connection Pooling
 
-**Reflex Default** (handled automatically):
-```python
-# rxconfig.py
-config = rx.Config(
-    app_name="mychat_reflex",
-    db_url="sqlite:///reflex.db",
-    # Connection pool settings (if using PostgreSQL in production)
-    # pool_size=10,
-    # max_overflow=20,
-    # pool_timeout=30,
-)
-```
+Reflex configures the engine via `rxconfig.py`. For SQLite in dev, pooling is largely a no-op. When migrating to Postgres, set `pool_size` / `max_overflow` / `pool_timeout` on the engine URL.
 
-**For Production (PostgreSQL)**:
-```python
-# Switch from SQLite to PostgreSQL for better concurrency
-db_url = "postgresql://user:pass@localhost/mychat_db"
-```
+### 9.4 Caching
 
-### 9.4 Caching Strategy
+The current `ChatState` does not cache messages — `on_load` and `select_chat` re-query on every navigation. If this becomes a bottleneck, a per-conversation in-state cache is the simplest first step:
 
-**Problem**: Repeated queries for same data waste resources
-
-**Solution 1: Application-level caching**
-```python
-from functools import lru_cache
-from datetime import datetime, timedelta
-
-# Cache conversation metadata for 5 minutes
-@lru_cache(maxsize=100)
-def get_conversation_cached(conversation_id: str, cache_timestamp: int):
-    """
-    Cache conversation by ID.
-
-    cache_timestamp is rounded to 5-minute intervals to invalidate cache.
-    """
-    with rx.session() as session:
-        conv = session.query(Conversation).filter(
-            Conversation.id == conversation_id
-        ).first()
-        session.expunge(conv)
-        return conv
-
-# Usage
-cache_ts = int(datetime.utcnow().timestamp() / 300)  # Round to 5-min intervals
-conversation = get_conversation_cached("conv-1", cache_ts)
-```
-
-**Solution 2: Reflex State caching**
 ```python
 class ChatState(rx.State):
     _message_cache: dict[str, list[Message]] = {}
-
-    def load_messages(self, conversation_id: str, force_refresh: bool = False):
-        # Check cache first
-        if not force_refresh and conversation_id in self._message_cache:
-            self.messages = self._message_cache[conversation_id]
-            return
-
-        # Load from database
-        with rx.session() as session:
-            messages = session.query(Message).filter(...).all()
-            session.expunge_all()
-
-            # Update cache
-            self._message_cache[conversation_id] = messages
-            self.messages = messages
+    # … populate / invalidate on send / delete
 ```
 
 ---
@@ -574,326 +484,200 @@ class ChatState(rx.State):
 
 ### 10.1 Schema Versioning
 
-**Track schema version**:
-```sql
-CREATE TABLE schema_version (
-    version INTEGER PRIMARY KEY,
-    applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    description TEXT
-);
+Alembic's `alembic_version` table is the single source of truth for "what schema am I on?". Don't roll your own `schema_version` table.
 
-INSERT INTO schema_version (version, description) VALUES
-(1, 'Initial schema with conversations and messages'),
-(2, 'Added chat_folders table'),
-(3, 'Added model_used and avatar_url to messages');
+### 10.2 Writing a Migration
+
+```bash
+alembic revision --autogenerate -m "add avatar_url to message"
 ```
 
-### 10.2 Migration Scripts
+Generated stub:
+```python
+def upgrade() -> None:
+    op.add_column("message", sa.Column("avatar_url", sa.String(), nullable=True))
 
-**Alembic (Reflex uses this)**:
-```bash
-# Create migration
-reflex db migrate --message "Add avatar_url to messages"
-
-# Generated file: alembic/versions/xxx_add_avatar_url.py
-def upgrade():
-    op.add_column('messages', sa.Column('avatar_url', sa.String(), nullable=True))
-
-def downgrade():
-    op.drop_column('messages', 'avatar_url')
+def downgrade() -> None:
+    op.drop_column("message", "avatar_url")
 ```
 
 ### 10.3 Data Backfill Pattern
 
-**Example: Backfill model_used for old messages**
-
 ```python
 def backfill_model_used():
-    """
-    Backfill model_used for old assistant messages.
-
-    Assume all old messages used default model.
-    """
     with rx.session() as session:
-        # Find assistant messages without model_used
-        messages = session.query(Message).filter(
-            Message.role == "assistant",
-            Message.model_used.is_(None)
+        orphans = session.exec(
+            select(Message)
+            .where(Message.role == "assistant", Message.model_used.is_(None))
         ).all()
 
-        # Update in batches
-        batch_size = 100
-        for i in range(0, len(messages), batch_size):
-            batch = messages[i:i+batch_size]
-            for msg in batch:
-                msg.model_used = "claude-sonnet-3-5"  # Default
-
-            session.commit()
-            print(f"Backfilled {min(i+batch_size, len(messages))} messages")
+        for msg in orphans:
+            msg.model_used = "claude-sonnet-3-5"  # historical default
+        session.commit()
 ```
 
 ---
 
-## 11. Database Monitoring & Debugging
+## 11. Monitoring & Debugging
 
 ### 11.1 Enable Query Logging
-
-**SQLAlchemy logging**:
 ```python
 import logging
-
-# Enable SQL query logging
 logging.basicConfig()
-logging.getLogger('sqlalchemy.engine').setLevel(logging.INFO)
+logging.getLogger("sqlalchemy.engine").setLevel(logging.INFO)
 ```
 
-**Output**:
-```
-INFO:sqlalchemy.engine:BEGIN (implicit)
-INFO:sqlalchemy.engine:SELECT messages.id, messages.content, ...
-FROM messages WHERE messages.conversation_id = ?
-INFO:sqlalchemy.engine:[generated in 0.00012s] ('conv-1',)
-```
-
-### 11.2 Query Performance Analysis
-
+### 11.2 Quick Performance Check
 ```python
 import time
-
-def analyze_query_performance():
-    """Measure query execution time."""
-    with rx.session() as session:
-        start = time.time()
-
-        # Your query here
-        messages = session.query(Message).filter(
-            Message.conversation_id == "conv-1"
-        ).all()
-
-        duration = time.time() - start
-        print(f"Query took {duration*1000:.2f}ms, returned {len(messages)} rows")
+start = time.time()
+with rx.session() as session:
+    rows = session.exec(
+        select(Message).where(Message.conversation_id == "conv-1")
+    ).all()
+print(f"{(time.time()-start)*1000:.2f} ms, {len(rows)} rows")
 ```
 
-### 11.3 Database Size Monitoring
+### 11.3 DB Size
 
-```sql
--- Check table sizes (SQLite)
-SELECT
-    name,
-    (SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=m.name) as count
-FROM sqlite_master m
-WHERE type='table';
+```bash
+# File size
+ls -lh reflex.db
 
--- Vacuum to reclaim space
-VACUUM;
+# Reclaim space after large deletes
+sqlite3 reflex.db "VACUUM;"
 ```
 
 ---
 
 ## 12. Backup & Recovery
 
-### 12.1 Backup Strategy
-
-**SQLite Backup (Simple)**:
+### 12.1 Backup
 ```bash
-# Copy database file
-cp reflex.db reflex_backup_$(date +%Y%m%d).db
+# Cold copy (app should be stopped)
+cp reflex.db reflex_backup_$(date +%Y%m%d_%H%M%S).db
 
-# Or use SQLite backup command
+# Hot, consistent backup
 sqlite3 reflex.db ".backup reflex_backup.db"
 ```
 
-**Automated Backup Script**:
-```python
-import shutil
-from datetime import datetime
-import os
-
-def backup_database():
-    """Create timestamped database backup."""
-    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-    backup_dir = "backups"
-    os.makedirs(backup_dir, exist_ok=True)
-
-    source = "reflex.db"
-    destination = f"{backup_dir}/reflex_{timestamp}.db"
-
-    shutil.copy2(source, destination)
-    print(f"Backup created: {destination}")
-
-    # Keep only last 7 days of backups
-    cleanup_old_backups(backup_dir, days=7)
-```
-
-### 12.2 Restore Procedure
-
+### 12.2 Restore
 ```bash
-# 1. Stop the application
 pkill -f "reflex run"
-
-# 2. Restore from backup
 cp backups/reflex_20260412_120000.db reflex.db
-
-# 3. Restart application
 reflex run
 ```
 
-### 12.3 Export to JSON (Portable Format)
-
+### 12.3 Export to JSON
 ```python
 import json
-from datetime import datetime
+from sqlmodel import select
 
 def export_conversations_to_json(output_file: str = "export.json"):
-    """Export all conversations to JSON for portability."""
     with rx.session() as session:
-        conversations = session.query(Conversation).all()
-
-        export_data = []
+        conversations = session.exec(select(Conversation)).all()
+        export = []
         for conv in conversations:
-            messages = session.query(Message).filter(
-                Message.conversation_id == conv.id
-            ).order_by(Message.created_at).all()
-
-            export_data.append({
+            messages = session.exec(
+                select(Message)
+                .where(Message.conversation_id == conv.id)
+                .order_by(Message.created_at)
+            ).all()
+            export.append({
                 "conversation": {
                     "id": conv.id,
                     "title": conv.title,
+                    "folder_id": conv.folder_id,
                     "created_at": conv.created_at.isoformat(),
                     "updated_at": conv.updated_at.isoformat(),
                 },
                 "messages": [
                     {
-                        "id": msg.id,
-                        "role": msg.role,
-                        "content": msg.content,
-                        "created_at": msg.created_at.isoformat(),
-                        "model_used": msg.model_used,
-                    }
-                    for msg in messages
-                ]
+                        "id": m.id,
+                        "role": m.role,
+                        "content": m.content,
+                        "created_at": m.created_at.isoformat(),
+                        "model_used": m.model_used,
+                    } for m in messages
+                ],
             })
-
-        with open(output_file, 'w') as f:
-            json.dump(export_data, f, indent=2)
-
-        print(f"Exported {len(conversations)} conversations to {output_file}")
+        with open(output_file, "w") as f:
+            json.dump(export, f, indent=2)
 ```
 
 ---
 
 ## 13. Security Considerations
 
-### 13.1 SQL Injection Prevention
+### 13.1 SQL Injection
+SQLModel/SQLAlchemy parameterises all comparisons — `Message.conversation_id == user_input` is safe. **Never** build raw SQL strings with f-strings around user input.
 
-**✅ Reflex/SQLAlchemy handles this automatically**:
-```python
-# Safe - parameterized query
-conversation_id = user_input  # Could be malicious
-messages = session.query(Message).filter(
-    Message.conversation_id == conversation_id  # ✅ Safe!
-).all()
-```
+### 13.2 Data at Rest
+SQLite file is unencrypted on disk. For sensitive deployments, use SQLCipher or move to a managed Postgres with disk encryption.
 
-**❌ NEVER do raw SQL with user input**:
-```python
-# DANGEROUS! Do NOT do this!
-query = f"SELECT * FROM messages WHERE conversation_id = '{user_input}'"
-session.execute(query)  # ❌ SQL injection vulnerability!
-```
-
-### 13.2 Data Encryption at Rest
-
-**SQLite with SQLCipher** (future enhancement):
-```python
-# Install: pip install sqlcipher3
-from sqlcipher3 import dbapi2 as sqlite
-
-# Encrypted database
-db_url = "sqlite+pysqlcipher:///:memory:?cipher=aes-256-cfb&kdf_iter=64000"
-```
-
-### 13.3 Sensitive Data Handling
-
-```python
-# Do NOT store API keys in database!
-class Message(rx.Model):
-    content: str  # ✅ User content only
-    # ❌ api_key: str  # NEVER store this!
-
-# API keys should be in environment variables or secrets manager
-```
+### 13.3 What Must NEVER Be Stored
+- API keys (Anthropic / OpenAI) — these live in `.env` and are loaded by `mychat_reflex.py:initialize_dependencies()`.
+- Passwords / tokens / PII — auth is not implemented yet; design carefully when it is.
 
 ---
 
 ## 14. Testing Database Operations
 
-### 14.1 In-Memory Database for Tests
+### 14.1 In-Memory DB Fixture
 
 ```python
 # tests/conftest.py
 import pytest
-import reflex as rx
+from sqlmodel import SQLModel, Session, create_engine
 
 @pytest.fixture
-def test_db():
-    """Create in-memory database for each test."""
-    # Override config to use in-memory DB
-    test_config = rx.Config(db_url="sqlite:///:memory:")
-
-    # Create tables
-    with rx.session() as session:
-        Message.metadata.create_all(session.bind)
-        Conversation.metadata.create_all(session.bind)
-
-    yield
-
-    # Cleanup (automatic with :memory:)
+def session():
+    engine = create_engine("sqlite:///:memory:")
+    SQLModel.metadata.create_all(engine)
+    with Session(engine) as s:
+        yield s
 ```
 
-### 14.2 Database Fixtures
+This is exactly what `tests/features/chat/test_use_cases.py` does today.
+
+### 14.2 Sample Fixture
 
 ```python
 @pytest.fixture
-def sample_conversation(test_db):
-    """Create a sample conversation with messages."""
-    with rx.session() as session:
-        conv = Conversation(
-            id="test-conv-1",
-            title="Test Conversation"
-        )
-        session.add(conv)
-
-        msg1 = Message(
-            id="msg-1",
-            conversation_id="test-conv-1",
-            role="user",
-            content="Hello"
-        )
-        msg2 = Message(
-            id="msg-2",
-            conversation_id="test-conv-1",
-            role="assistant",
-            content="Hi there!"
-        )
-
-        session.add_all([msg1, msg2])
-        session.commit()
-
-    return "test-conv-1"
+def sample_conversation(session):
+    conv = Conversation(id="test-conv-1", title="Test Conversation")
+    session.add(conv)
+    session.add(Message(id="msg-1", conversation_id=conv.id, role="user",      content="Hello"))
+    session.add(Message(id="msg-2", conversation_id=conv.id, role="assistant", content="Hi there!"))
+    session.commit()
+    return conv.id
 ```
 
 ### 14.3 Integration Test Example
 
 ```python
-def test_load_conversation_messages(sample_conversation):
-    """Test loading messages for a conversation."""
-    with rx.session() as session:
-        messages = session.query(Message).filter(
-            Message.conversation_id == sample_conversation
-        ).order_by(Message.created_at).all()
+from sqlmodel import select
 
-        assert len(messages) == 2
-        assert messages[0].content == "Hello"
-        assert messages[1].content == "Hi there!"
+def test_load_conversation_messages(session, sample_conversation):
+    messages = session.exec(
+        select(Message)
+        .where(Message.conversation_id == sample_conversation)
+        .order_by(Message.created_at)
+    ).all()
+
+    assert len(messages) == 2
+    assert messages[0].content == "Hello"
+    assert messages[1].content == "Hi there!"
 ```
+
+---
+
+## 15. Known Drift / Future Work
+
+The following items are documented gaps between this reference and ideal state. Each should be a follow-up PR with an Alembic migration:
+
+- [ ] Add `ON DELETE CASCADE` from `message.conversation_id` → `conversation.id`.
+- [ ] Add `ON DELETE SET NULL` from `conversation.folder_id` → `chatfolder.id`.
+- [ ] Add hot-path indexes (see §9.1).
+- [ ] Consider a CHECK constraint on `message.role` (or migrate to a SQLModel `Enum` column).
+- [ ] Decide whether `ChatFolder` belongs in `features/workspace/models.py` (currently lives in `features/chat/models.py`).
