@@ -37,13 +37,16 @@ def _shiki_code_block(text, **props):
     """
     Shiki code block that responds to Reflex state.
     Uses rx.cond to render different ShikiCodeBlock instances for light/dark mode.
+    
+    Note: We cast to string explicitly because LocalStorage fields can sometimes
+    pass proxy objects instead of plain strings to component props.
     """
     return rx.cond(
         rx.color_mode == "light",
         ShikiHighLevelCodeBlock.create(
             text,
             language=props.get("language"),
-            theme=ChatState.light_code_theme,
+            theme=rx.Var.create(ChatState.light_code_theme).to(str),
             show_line_numbers=False,
             wrap_long_lines=True,
             width="100%",
@@ -51,7 +54,7 @@ def _shiki_code_block(text, **props):
         ShikiHighLevelCodeBlock.create(
             text,
             language=props.get("language"),
-            theme=ChatState.code_theme,
+            theme=rx.Var.create(ChatState.code_theme).to(str),
             show_line_numbers=False,
             wrap_long_lines=True,
             width="100%",
