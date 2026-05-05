@@ -167,7 +167,13 @@ class ChatState(rx.State):
         """Load data when page loads."""
         logger.info("=" * 80)
         logger.info("[ChatState.on_load] 🚀 Page load triggered")
+        logger.info(f"[ChatState.on_load] Current is_generating={self.is_generating}")
         logger.info("=" * 80)
+
+        # Reset generating state on page load (in case of interrupted background tasks)
+        if self.is_generating:
+            logger.warning("[ChatState.on_load] ⚠️ Resetting is_generating from True to False")
+            self.is_generating = False
 
         use_case = LoadHistoryUseCase()
         with rx.session() as session:
@@ -179,6 +185,8 @@ class ChatState(rx.State):
             db_chats = session.query(Conversation).all()
             self.folders = [ChatFolder(**f.model_dump()) for f in db_folders]
             self.chats = [Conversation(**c.model_dump()) for c in db_chats]
+        
+        logger.info(f"[ChatState.on_load] ✅ Loaded {len(self.messages)} messages, {len(self.chats)} chats")
 
     # ========================================================================
     # UI EVENT HANDLERS (Synchronous / Fast Async)
