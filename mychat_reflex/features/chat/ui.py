@@ -447,10 +447,9 @@ def debug_dump_button() -> rx.Component:
     return rx.el.button(
         rx.icon("bug", size=17),
         on_click=[
-            rx.console_log("code_theme (dark):", ChatState.code_theme),
-            rx.console_log("light_code_theme:", ChatState.light_code_theme),
-            rx.console_log("active_code_theme:", ChatState.active_code_theme),
-            rx.console_log("color_mode:", rx.color_mode),
+            rx.console_log(ChatState.code_theme),
+            rx.console_log(ChatState.light_code_theme),
+            rx.console_log(ChatState.active_code_theme),
         ],
         class_name=(
             f"h-9 w-9 rounded-full flex items-center justify-center "
