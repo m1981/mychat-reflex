@@ -88,12 +88,12 @@ class ChatState(rx.State):
     drag_over_folder_id: str = ""  # "" = none, "__root__" = unfiled zone
 
     # UI preferences (LocalStorage)
-    selected_model: str = rx.LocalStorage("claude-sonnet-4-5")
-    temperature: str = rx.LocalStorage("0.7")
-    enable_reasoning: str = rx.LocalStorage("false")
-    reasoning_budget: str = rx.LocalStorage("2000")
-    code_theme: str = rx.LocalStorage("nord")
-    light_code_theme: str = rx.LocalStorage("github-light")
+    selected_model: str = rx.LocalStorage("claude-sonnet-4-5", sync=True)
+    temperature: str = rx.LocalStorage("0.7", sync=True)
+    enable_reasoning: str = rx.LocalStorage("false", sync=True)
+    reasoning_budget: str = rx.LocalStorage("2000", sync=True)
+    code_theme: str = rx.LocalStorage("nord", sync=True)
+    light_code_theme: str = rx.LocalStorage("github-light", sync=True)
 
     # Explicit setters for LocalStorage fields
     def set_selected_model(self, value):
@@ -143,6 +143,10 @@ class ChatState(rx.State):
 
     @rx.var
     def active_code_theme(self) -> str:
+        """Returns the appropriate code theme based on current color mode."""
+        # Note: rx.color_mode returns "light" or "dark" as a string
+        # We can't use rx.color_mode_cond here because this is a computed var
+        # Instead, we'll handle the switching in the UI component
         return self.code_theme
 
     @rx.var

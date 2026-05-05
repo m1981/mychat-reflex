@@ -508,6 +508,11 @@ def chat_header() -> rx.Component:
                 class_name="hidden dark:block",
             ),
             debug_dump_button(),
+            rx.el.button(
+                rx.icon("trash-2", size=17),
+                on_click=rx.call_script("localStorage.clear(); window.location.reload();"),
+                class_name=icon_cls,
+            ),
             rx.el.button(rx.icon("pen-tool", size=17), class_name=icon_cls),
             rx.el.button(rx.icon("plus", size=17), class_name=icon_cls),
             rx.el.button(rx.icon("more-vertical", size=17), class_name=icon_cls),
