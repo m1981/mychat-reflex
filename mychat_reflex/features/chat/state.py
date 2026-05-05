@@ -11,7 +11,7 @@ Architectural Rules Applied:
 import logging
 import reflex as rx
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, TypedDict
 from uuid import uuid4
 import asyncio
 
@@ -21,6 +21,14 @@ from .models import Message, Conversation, ChatFolder
 from .use_cases import SendMessageUseCase, LoadHistoryUseCase, PrepRegenerationUseCase
 
 logger = logging.getLogger(__name__)
+
+
+class FolderGroup(TypedDict):
+    """A folder bundled with the chats that belong to it (typed for rx.foreach)."""
+
+    id: str
+    name: str
+    chats: list[Conversation]
 
 
 def _close_open_code_block(content: str) -> str:
@@ -73,6 +81,10 @@ class ChatState(rx.State):
     # Destructive Action Warning State
     show_truncate_warning: bool = False
     pending_regenerate_id: str = ""
+
+    # Drag-and-drop state (chats <-> folders)
+    dragged_chat_id: str = ""
+    drag_over_folder_id: str = ""  # "" = none, "__root__" = unfiled zone
 
     # UI preferences (LocalStorage)
     selected_model: str = rx.LocalStorage("claude-sonnet-4-5")
@@ -173,7 +185,9 @@ class ChatState(rx.State):
 
         # Reset generating state on page load (in case of interrupted background tasks)
         if self.is_generating:
-            logger.warning("[ChatState.on_load] ⚠️ Resetting is_generating from True to False")
+            logger.warning(
+                "[ChatState.on_load] ⚠️ Resetting is_generating from True to False"
+            )
             self.is_generating = False
 
         use_case = LoadHistoryUseCase()
@@ -186,9 +200,11 @@ class ChatState(rx.State):
             db_chats = session.query(Conversation).all()
             self.folders = [ChatFolder(**f.model_dump()) for f in db_folders]
             self.chats = [Conversation(**c.model_dump()) for c in db_chats]
-        
+
         self.is_loading = False
-        logger.info(f"[ChatState.on_load] ✅ Loaded {len(self.messages)} messages, {len(self.chats)} chats")
+        logger.info(
+            f"[ChatState.on_load] ✅ Loaded {len(self.messages)} messages, {len(self.chats)} chats"
+        )
 
     # ========================================================================
     # UI EVENT HANDLERS (Synchronous / Fast Async)
@@ -212,7 +228,7 @@ class ChatState(rx.State):
         with rx.session() as session:
             db_messages = await use_case.execute(session, chat_id)
             self.messages = [Message(**m.model_dump()) for m in db_messages]
-        
+
         self.is_loading = False
 
     def create_new_chat(self):
@@ -228,6 +244,104 @@ class ChatState(rx.State):
         self.current_conversation_id = new_id
         self.current_chat_title = "New Chat"
         self.messages = []
+
+    # ========================================================================
+    # DRAG-AND-DROP: CHATS <-> FOLDERS
+    # ========================================================================
+
+    def start_drag_chat(self, chat_id: str):
+        """Fired on dragstart of a chat item."""
+        logger.info(f"[DnD] start_drag_chat({chat_id})")
+        self.dragged_chat_id = chat_id
+
+    def end_drag_chat(self):
+        """Fired on dragend (drop succeeded OR cancelled)."""
+        logger.info("[DnD] end_drag_chat")
+        self.dragged_chat_id = ""
+        self.drag_over_folder_id = ""
+
+    def set_drag_over_folder(self, folder_id: str):
+        """Fired on dragenter/dragover of a folder drop zone."""
+        if self.drag_over_folder_id != folder_id:
+            self.drag_over_folder_id = folder_id
+
+    def clear_drag_over_folder(self):
+        """Fired on dragleave of a folder drop zone."""
+        self.drag_over_folder_id = ""
+
+    def drop_chat_on_folder(self, folder_id: str):
+        """Fired on drop on a folder. folder_id == '' means move to root (unfiled)."""
+        chat_id = self.dragged_chat_id
+        logger.info(f"[DnD] drop_chat_on_folder chat={chat_id} folder={folder_id!r}")
+
+        # Always clear visual state
+        self.drag_over_folder_id = ""
+        self.dragged_chat_id = ""
+
+        if not chat_id:
+            return
+
+        target_folder_id: Optional[str] = folder_id if folder_id else None
+
+        # Find chat in memory; bail out if it's already in this folder
+        chat_obj = next((c for c in self.chats if c.id == chat_id), None)
+        if chat_obj is None:
+            return rx.toast.error("Chat not found.", position="bottom-right")
+        if chat_obj.folder_id == target_folder_id:
+            return  # no-op
+
+        # Persist
+        with rx.session() as session:
+            db_chat = (
+                session.query(Conversation).filter(Conversation.id == chat_id).first()
+            )
+            if db_chat is None:
+                return rx.toast.error("Chat not found in DB.", position="bottom-right")
+            db_chat.folder_id = target_folder_id
+            db_chat.updated_at = datetime.now(timezone.utc)
+            session.commit()
+
+        # Update in-memory list. We mutate the matching Conversation in place
+        # (avoids `model_dump()` on SQLModel-with-table=True, which leaks
+        # `_sa_instance_state` and triggers Pydantic serialization warnings),
+        # then reassign self.chats so Reflex detects the change and re-renders.
+        for c in self.chats:
+            if c.id == chat_id:
+                c.folder_id = target_folder_id
+                break
+        self.chats = self.chats
+
+        if target_folder_id is None:
+            return rx.toast.success(
+                "Moved chat out of folder.", position="bottom-right"
+            )
+        folder_name = next(
+            (f.name for f in self.folders if f.id == target_folder_id), "folder"
+        )
+        return rx.toast.success(
+            f"Moved chat to {folder_name!r}.", position="bottom-right"
+        )
+
+    @rx.var
+    def unfiled_chats(self) -> list[Conversation]:
+        """Chats not assigned to any folder."""
+        return [c for c in self.chats if c.folder_id is None]
+
+    @rx.var
+    def folders_with_chats(self) -> list["FolderGroup"]:
+        """Folders + their chats, filtered by sidebar_search.
+
+        Typed as a list of ``FolderGroup`` so that ``rx.foreach`` can introspect
+        nested fields (id / name / chats).
+        """
+        search = self.sidebar_search.lower().strip()
+        result: list[FolderGroup] = []
+        for f in self.folders:
+            if search and search not in f.name.lower():
+                continue
+            folder_chats = [c for c in self.chats if c.folder_id == f.id]
+            result.append(FolderGroup(id=f.id, name=f.name, chats=folder_chats))
+        return result
 
     def create_new_folder(self):
         new_id = str(uuid4())
@@ -462,13 +576,15 @@ class ChatState(rx.State):
         logger.info(f"[request_regenerate] Current is_loading={self.is_loading}")
         logger.info(f"[request_regenerate] Current messages count={len(self.messages)}")
         logger.info("=" * 80)
-        
+
         if self.is_loading:
-            logger.warning(f"[request_regenerate] ⚠️ BLOCKED: Still loading messages")
+            logger.warning("[request_regenerate] ⚠️ BLOCKED: Still loading messages")
             return rx.toast.warning("Please wait, loading messages...")
-        
+
         if self.is_generating:
-            logger.warning(f"[request_regenerate] ⚠️ BLOCKED: is_generating={self.is_generating}")
+            logger.warning(
+                f"[request_regenerate] ⚠️ BLOCKED: is_generating={self.is_generating}"
+            )
             return rx.toast.warning("Already generating a response.")
 
         target_idx = next(
@@ -481,24 +597,34 @@ class ChatState(rx.State):
         target_msg = self.messages[target_idx]
         is_destructive = False
 
-        logger.info(f"[request_regenerate] Target message index={target_idx}, role={target_msg.role}")
+        logger.info(
+            f"[request_regenerate] Target message index={target_idx}, role={target_msg.role}"
+        )
         logger.info(f"[request_regenerate] Total messages={len(self.messages)}")
 
         if target_msg.role == "assistant":
             if target_idx < len(self.messages) - 1:
                 is_destructive = True
-                logger.info(f"[request_regenerate] DESTRUCTIVE: Assistant message with {len(self.messages) - target_idx - 1} messages after it")
+                logger.info(
+                    f"[request_regenerate] DESTRUCTIVE: Assistant message with {len(self.messages) - target_idx - 1} messages after it"
+                )
         else:
             if target_idx < len(self.messages) - 2:
                 is_destructive = True
-                logger.info(f"[request_regenerate] DESTRUCTIVE: User message with {len(self.messages) - target_idx - 2} messages after response")
+                logger.info(
+                    f"[request_regenerate] DESTRUCTIVE: User message with {len(self.messages) - target_idx - 2} messages after response"
+                )
 
         if is_destructive:
-            logger.info(f"[request_regenerate] 🚨 DESTRUCTIVE PATH: Showing warning modal")
+            logger.info(
+                "[request_regenerate] 🚨 DESTRUCTIVE PATH: Showing warning modal"
+            )
             self.pending_regenerate_id = message_id
             self.show_truncate_warning = True
         else:
-            logger.info(f"[request_regenerate] ⚡ FAST PATH: Calling confirm_regenerate directly")
+            logger.info(
+                "[request_regenerate] ⚡ FAST PATH: Calling confirm_regenerate directly"
+            )
             # FAST PATH: Trigger regeneration immediately
             return ChatState.confirm_regenerate(message_id)
 
@@ -511,53 +637,67 @@ class ChatState(rx.State):
     async def confirm_regenerate(self, message_id: str = ""):
         """Execute the regeneration using pure Use Cases."""
         logger.info("=" * 80)
-        logger.info(f"[confirm_regenerate] 🎬 BACKGROUND EVENT STARTED")
+        logger.info("[confirm_regenerate] 🎬 BACKGROUND EVENT STARTED")
         logger.info(f"[confirm_regenerate] Received message_id={message_id!r}")
         logger.info("=" * 80)
-        
+
         async with self:
-            logger.info(f"[confirm_regenerate] Inside async context - is_generating={self.is_generating}")
-            logger.info(f"[confirm_regenerate] pending_regenerate_id={self.pending_regenerate_id!r}")
-            
+            logger.info(
+                f"[confirm_regenerate] Inside async context - is_generating={self.is_generating}"
+            )
+            logger.info(
+                f"[confirm_regenerate] pending_regenerate_id={self.pending_regenerate_id!r}"
+            )
+
             self.show_truncate_warning = False
             # Use the passed message_id, or fall back to pending_regenerate_id
             target_message_id = message_id or self.pending_regenerate_id
             self.pending_regenerate_id = ""
-            
-            logger.info(f"[confirm_regenerate] Resolved target_message_id={target_message_id!r}")
-            
+
+            logger.info(
+                f"[confirm_regenerate] Resolved target_message_id={target_message_id!r}"
+            )
+
             if not target_message_id:
                 logger.error("[confirm_regenerate] ❌ No message ID available!")
                 yield rx.toast.error("No message ID provided for regeneration.")
                 self.is_generating = False
                 return
-                
-            logger.info(f"[confirm_regenerate] ✅ Setting is_generating=True")
+
+            logger.info("[confirm_regenerate] ✅ Setting is_generating=True")
             self.is_generating = True
 
         # 1. Execute Business Logic (DB Truncation) via Use Case
-        logger.info(f"[confirm_regenerate] STEP 1: Executing PrepRegenerationUseCase")
+        logger.info("[confirm_regenerate] STEP 1: Executing PrepRegenerationUseCase")
         with rx.session() as session:
             prep_use_case = PrepRegenerationUseCase()
             try:
                 new_ai_msg_id, prompt_text, truncated_history = prep_use_case.execute(
                     session, self.current_conversation_id, target_message_id
                 )
-                logger.info(f"[confirm_regenerate] ✅ Prep complete: new_ai_msg_id={new_ai_msg_id}")
+                logger.info(
+                    f"[confirm_regenerate] ✅ Prep complete: new_ai_msg_id={new_ai_msg_id}"
+                )
                 logger.info(f"[confirm_regenerate] Prompt text: {prompt_text[:100]}...")
-                logger.info(f"[confirm_regenerate] Truncated history length: {len(truncated_history)}")
+                logger.info(
+                    f"[confirm_regenerate] Truncated history length: {len(truncated_history)}"
+                )
             except ValueError as e:
-                logger.error(f"[confirm_regenerate] ❌ PrepRegenerationUseCase failed: {e}")
+                logger.error(
+                    f"[confirm_regenerate] ❌ PrepRegenerationUseCase failed: {e}"
+                )
                 yield rx.toast.error(str(e))
                 async with self:
                     self.is_generating = False
                 return
 
         # 2. Sync UI State with the truncated history
-        logger.info(f"[confirm_regenerate] STEP 2: Syncing UI state")
+        logger.info("[confirm_regenerate] STEP 2: Syncing UI state")
         async with self:
             self.messages = [Message(**m.model_dump()) for m in truncated_history]
-            logger.info(f"[confirm_regenerate] Messages after truncation: {len(self.messages)}")
+            logger.info(
+                f"[confirm_regenerate] Messages after truncation: {len(self.messages)}"
+            )
 
             # Add the empty AI placeholder returned by the Use Case
             ai_msg = Message(
@@ -568,7 +708,9 @@ class ChatState(rx.State):
             )
             self.messages.append(ai_msg)
             self.messages = self.messages
-            logger.info(f"[confirm_regenerate] Added AI placeholder, total messages: {len(self.messages)}")
+            logger.info(
+                f"[confirm_regenerate] Added AI placeholder, total messages: {len(self.messages)}"
+            )
 
         # 3. Stream the new response (Reusing SendMessageUseCase)
         logger.info("[confirm_regenerate] STEP 3: Streaming regenerated response...")
@@ -577,24 +719,28 @@ class ChatState(rx.State):
             current_temp = self.temperature_float
             current_reasoning = self.enable_reasoning_bool
             current_budget = self.reasoning_budget_int
-            logger.info(f"[confirm_regenerate] Model config: {current_model}, temp={current_temp}, reasoning={current_reasoning}")
+            logger.info(
+                f"[confirm_regenerate] Model config: {current_model}, temp={current_temp}, reasoning={current_reasoning}"
+            )
 
         llm_service = AppContainer.resolve_llm_service(current_model)
         stream_use_case = SendMessageUseCase(llm_service)
 
         full_response = ""
         chat_history = self.messages[:-2]
-        logger.info(f"[confirm_regenerate] Chat history for LLM: {len(chat_history)} messages")
+        logger.info(
+            f"[confirm_regenerate] Chat history for LLM: {len(chat_history)} messages"
+        )
 
         async for chunk in stream_use_case.execute(
-                conversation_id=self.current_conversation_id,
-                user_message=prompt_text,
-                history=chat_history,
-                config=LLMConfig(
-                    temperature=current_temp,
-                    enable_reasoning=current_reasoning,
-                    reasoning_budget=current_budget,
-                ),
+            conversation_id=self.current_conversation_id,
+            user_message=prompt_text,
+            history=chat_history,
+            config=LLMConfig(
+                temperature=current_temp,
+                enable_reasoning=current_reasoning,
+                reasoning_budget=current_budget,
+            ),
         ):
             char_buffer = ""
             for char in chunk:
@@ -603,7 +749,9 @@ class ChatState(rx.State):
 
                 if len(char_buffer) >= 40:
                     async with self:
-                        self.messages[-1].content = _close_open_code_block(full_response)
+                        self.messages[-1].content = _close_open_code_block(
+                            full_response
+                        )
                         self.messages = self.messages
                     yield
                     await asyncio.sleep(0.01)
@@ -617,25 +765,36 @@ class ChatState(rx.State):
                 await asyncio.sleep(0.01)
 
         # 4. Save final message
-        logger.info(f"[confirm_regenerate] STEP 4: Saving final message (length={len(full_response)})")
+        logger.info(
+            f"[confirm_regenerate] STEP 4: Saving final message (length={len(full_response)})"
+        )
         async with self:
             with rx.session() as session:
                 # Fetch the placeholder we created in the Prep Use Case and update it
-                ai_msg_final = session.query(Message).filter(Message.id == new_ai_msg_id).first()
+                ai_msg_final = (
+                    session.query(Message).filter(Message.id == new_ai_msg_id).first()
+                )
                 if ai_msg_final:
                     ai_msg_final.content = full_response
-                    logger.info(f"[confirm_regenerate] ✅ Updated DB message {new_ai_msg_id}")
+                    logger.info(
+                        f"[confirm_regenerate] ✅ Updated DB message {new_ai_msg_id}"
+                    )
                 else:
-                    logger.error(f"[confirm_regenerate] ❌ Could not find message {new_ai_msg_id} in DB!")
+                    logger.error(
+                        f"[confirm_regenerate] ❌ Could not find message {new_ai_msg_id} in DB!"
+                    )
 
-                conversation = session.query(Conversation).filter(
-                    Conversation.id == self.current_conversation_id).first()
+                conversation = (
+                    session.query(Conversation)
+                    .filter(Conversation.id == self.current_conversation_id)
+                    .first()
+                )
                 if conversation:
                     conversation.updated_at = datetime.now(timezone.utc)
                 session.commit()
 
             self.messages[-1].content = full_response
-            logger.info(f"[confirm_regenerate] ✅ Setting is_generating=False")
+            logger.info("[confirm_regenerate] ✅ Setting is_generating=False")
             self.is_generating = False
             self.messages = self.messages
 
