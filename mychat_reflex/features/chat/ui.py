@@ -36,12 +36,16 @@ DARK_CODE_THEMES = (
 def _shiki_code_block(text, **props):
     """
     Shiki code block that responds to Reflex state.
-    Uses the active_code_theme computed var which switches based on color mode.
+    Uses rx.cond to switch theme based on color mode at render time.
     """
     return ShikiHighLevelCodeBlock.create(
         text,
         language=props.get("language"),
-        theme=ChatState.active_code_theme,
+        theme=rx.cond(
+            rx.color_mode == "light",
+            ChatState.light_code_theme,
+            ChatState.code_theme,
+        ),
         show_line_numbers=False,
         wrap_long_lines=True,
         width="100%",
@@ -442,7 +446,12 @@ def debug_dump_button() -> rx.Component:
     """Debug button to dump state and localStorage."""
     return rx.el.button(
         rx.icon("bug", size=17),
-        on_click=rx.console_log(ChatState.active_code_theme),
+        on_click=[
+            rx.console_log("code_theme (dark):", ChatState.code_theme),
+            rx.console_log("light_code_theme:", ChatState.light_code_theme),
+            rx.console_log("active_code_theme:", ChatState.active_code_theme),
+            rx.console_log("color_mode:", rx.color_mode),
+        ],
         class_name=(
             f"h-9 w-9 rounded-full flex items-center justify-center "
             f"cursor-pointer transition-colors "
