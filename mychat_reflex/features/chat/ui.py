@@ -33,20 +33,15 @@ DARK_CODE_THEMES = (
     "catppuccin-mocha",
     "ayu-dark",
 )
-DYNAMIC_CODE_THEME_CONFIG = {
-    "mode": "dynamic-local-storage",
-    "light_storage_key": "light_code_theme_v4",
-    "dark_storage_key": "code_theme_v4",
-    "light_default": "github-light",
-    "dark_default": "nord",
-}
-
-
 def _shiki_code_block(text, **props):
+    """
+    Shiki code block that responds to Reflex state.
+    Uses the active_code_theme computed var which switches based on color mode.
+    """
     return ShikiHighLevelCodeBlock.create(
         text,
         language=props.get("language"),
-        themes=DYNAMIC_CODE_THEME_CONFIG,
+        theme=ChatState.active_code_theme,
         show_line_numbers=False,
         wrap_long_lines=True,
         width="100%",
@@ -443,6 +438,26 @@ def chat_input() -> rx.Component:
     )
 
 
+def debug_dump_button() -> rx.Component:
+    """Debug button to dump state and localStorage."""
+    return rx.el.button(
+        rx.icon("bug", size=17),
+        on_click=rx.console_log(
+            "State:",
+            {
+                "code_theme": ChatState.code_theme,
+                "light_code_theme": ChatState.light_code_theme,
+                "active_code_theme": ChatState.active_code_theme,
+            },
+        ),
+        class_name=(
+            f"h-9 w-9 rounded-full flex items-center justify-center "
+            f"cursor-pointer transition-colors "
+            f"{T['text_secondary']} {T['surface_hover']}"
+        ),
+    )
+
+
 def chat_header() -> rx.Component:
     icon_cls = (
         f"h-9 w-9 rounded-full flex items-center justify-center "
@@ -491,6 +506,7 @@ def chat_header() -> rx.Component:
                 ),
                 class_name="hidden dark:block",
             ),
+            debug_dump_button(),
             rx.el.button(rx.icon("pen-tool", size=17), class_name=icon_cls),
             rx.el.button(rx.icon("plus", size=17), class_name=icon_cls),
             rx.el.button(rx.icon("more-vertical", size=17), class_name=icon_cls),
