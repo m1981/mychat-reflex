@@ -11,6 +11,7 @@ Architectural Rules Applied:
 import logging
 from typing import AsyncGenerator, List, Optional
 from sqlmodel import Session, select
+from uuid import uuid4
 
 from mychat_reflex.core.llm_ports import ILLMService, LLMConfig
 from .models import Message
@@ -112,3 +113,84 @@ class LoadHistoryUseCase:
 
         messages = session.exec(statement).all()
         return list(messages)
+
+
+# Add this to the bottom of mychat_reflex/features/chat/use_cases.py
+
+
+
+class PrepRegenerationUseCase:
+    """
+    Handles the business logic of truncating a conversation timeline.
+    Determines which messages to delete, deletes them from the DB,
+    and returns the new state.
+    """
+
+    def execute(
+            self, session: Session, conversation_id: str, target_message_id: str
+    ) -> tuple[str, str, list[Message]]:
+        """
+        Args:
+            session: Database session
+            conversation_id: The current chat ID
+            target_message_id: The ID of the message the user clicked "regenerate" on
+
+        Returns:
+            Tuple containing:
+            - new_ai_msg_id (str): The ID for the new AI placeholder
+            - prompt_text (str): The user prompt to send to the LLM
+            - truncated_history (list[Message]): The remaining messages before the prompt
+        """
+        logger.info(f"[PrepRegenerationUseCase] Preparing regeneration for msg: {target_message_id}")
+
+        # 1. Fetch all messages in this conversation
+        messages = (
+            session.query(Message)
+            .filter(Message.conversation_id == conversation_id)
+            .order_by(Message.created_at)
+            .all()
+        )
+
+        # 2. Find the target message
+        target_idx = next((i for i, m in enumerate(messages) if m.id == target_message_id), -1)
+        if target_idx == -1:
+            raise ValueError("Message not found in database.")
+
+        target_msg = messages[target_idx]
+
+        # 3. Determine the prompt and what to delete
+        if target_msg.role == "assistant":
+            if target_idx == 0 or messages[target_idx - 1].role != "user":
+                raise ValueError("Could not find the original user prompt.")
+            prompt_text = messages[target_idx - 1].content
+            delete_from_idx = target_idx
+        else:
+            prompt_text = target_msg.content
+            delete_from_idx = target_idx + 1
+
+        # 4. Delete the alternate timeline from the database
+        messages_to_delete = messages[delete_from_idx:]
+        ids_to_delete = [m.id for m in messages_to_delete]
+
+        if ids_to_delete:
+            logger.info(f"[PrepRegenerationUseCase] Truncating {len(ids_to_delete)} messages from DB.")
+            session.query(Message).filter(Message.id.in_(ids_to_delete)).delete(synchronize_session=False)
+
+        # 5. Create the new AI placeholder in the database
+        new_ai_msg_id = str(uuid4())
+        new_ai_msg = Message(
+            id=new_ai_msg_id,
+            conversation_id=conversation_id,
+            role="assistant",
+            content="",
+        )
+        session.add(new_ai_msg)
+        session.commit()
+
+        # 6. Return the clean data for the UI to use
+        truncated_history = messages[:delete_from_idx]
+
+        # Detach from session to prevent DetachedInstanceError in UI
+        session.expunge_all()
+
+        return new_ai_msg_id, prompt_text, truncated_history
