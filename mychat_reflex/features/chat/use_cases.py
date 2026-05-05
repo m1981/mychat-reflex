@@ -195,9 +195,18 @@ class PrepRegenerationUseCase:
 
         # Make copies of the data to prevent DetachedInstanceError in UI
         # This ensures the objects can be used after the session closes
-        # Use mode='python' to ensure all fields are included, including id
-        truncated_history_copies = [
-            Message(**msg.model_dump(mode='python')) for msg in truncated_history
-        ]
+        # We need to manually copy all fields because model_dump() may exclude some
+        truncated_history_copies = []
+        for msg in truncated_history:
+            msg_copy = Message(
+                id=msg.id,
+                conversation_id=msg.conversation_id,
+                role=msg.role,
+                content=msg.content,
+                created_at=msg.created_at,
+                model_used=msg.model_used,
+                avatar_url=msg.avatar_url,
+            )
+            truncated_history_copies.append(msg_copy)
 
         return new_ai_msg_id, prompt_text, truncated_history_copies
