@@ -36,16 +36,12 @@ DARK_CODE_THEMES = (
 def _shiki_code_block(text, **props):
     """
     Shiki code block that responds to Reflex state.
-    Uses rx.cond to switch theme based on color mode at render time.
+    Uses ChatState.active_code_theme which contains rx.color_mode_cond.
     """
     return ShikiHighLevelCodeBlock.create(
         text,
         language=props.get("language"),
-        theme=rx.cond(
-            rx.color_mode == "light",
-            ChatState.light_code_theme,
-            ChatState.code_theme,
-        ),
+        theme=ChatState.active_code_theme,
         show_line_numbers=False,
         wrap_long_lines=True,
         width="100%",
@@ -443,14 +439,27 @@ def chat_input() -> rx.Component:
 
 
 def debug_dump_button() -> rx.Component:
-    """Debug button to dump state and localStorage."""
+    """Debug button to dump localStorage to a JSON file."""
     return rx.el.button(
-        rx.icon("bug", size=17),
-        on_click=[
-            rx.console_log(ChatState.code_theme),
-            rx.console_log(ChatState.light_code_theme),
-            rx.console_log(ChatState.active_code_theme),
-        ],
+        rx.icon("download", size=17),
+        on_click=rx.call_script(
+            """
+            const data = {};
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                data[key] = localStorage.getItem(key);
+            }
+            const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'localStorage-dump-' + Date.now() + '.json';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+            """
+        ),
         class_name=(
             f"h-9 w-9 rounded-full flex items-center justify-center "
             f"cursor-pointer transition-colors "

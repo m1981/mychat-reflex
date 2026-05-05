@@ -143,11 +143,11 @@ class ChatState(rx.State):
 
     @rx.var
     def active_code_theme(self) -> str:
-        """Returns the appropriate code theme based on current color mode."""
-        # Note: rx.color_mode returns "light" or "dark" as a string
-        # We can't use rx.color_mode_cond here because this is a computed var
-        # Instead, we'll handle the switching in the UI component
-        return self.code_theme
+        """Returns the appropriate code theme based on current color mode.
+        
+        This uses rx.color_mode_cond which evaluates at render time in the browser.
+        """
+        return rx.color_mode_cond(self.light_code_theme, self.code_theme)
 
     @rx.var
     def model_display_name(self) -> str:
