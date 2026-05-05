@@ -15,17 +15,13 @@ from mychat_reflex.features.chat.use_cases import PrepRegenerationUseCase
 @pytest.fixture(name="session")
 def session_fixture():
     """Create a test database session."""
-    from mychat_reflex.core.database import DatabaseConfig
-    from sqlmodel import create_engine, Session
+    from sqlmodel import create_engine, Session, SQLModel
     
     # Use in-memory SQLite for tests
     engine = create_engine("sqlite:///:memory:")
     
-    # Create tables
-    from mychat_reflex.features.chat.models import Message, Conversation, ChatFolder
-    Message.metadata.create_all(engine)
-    Conversation.metadata.create_all(engine)
-    ChatFolder.metadata.create_all(engine)
+    # Create all tables using SQLModel's metadata
+    SQLModel.metadata.create_all(engine)
     
     with Session(engine) as session:
         yield session
