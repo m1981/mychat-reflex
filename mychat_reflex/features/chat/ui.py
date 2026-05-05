@@ -549,8 +549,42 @@ def chat_history() -> rx.Component:
     )
 
 
+def truncate_warning_modal() -> rx.Component:
+    """Modal warning for destructive regenerate actions."""
+    return rx.dialog.root(
+        rx.dialog.content(
+            rx.dialog.title("Regenerate Message"),
+            rx.dialog.description(
+                "This will delete all messages after this point. This action cannot be undone. Continue?",
+                class_name="text-sm mb-4",
+            ),
+            rx.flex(
+                rx.dialog.close(
+                    rx.button(
+                        "Cancel",
+                        variant="soft",
+                        color_scheme="gray",
+                        on_click=ChatState.cancel_regenerate,
+                    ),
+                ),
+                rx.dialog.close(
+                    rx.button(
+                        "Regenerate",
+                        color_scheme="red",
+                        on_click=ChatState.confirm_regenerate,
+                    ),
+                ),
+                spacing="3",
+                justify="end",
+            ),
+        ),
+        open=ChatState.show_truncate_warning,
+    )
+
+
 def chat_area() -> rx.Component:
     return rx.el.main(
+        truncate_warning_modal(),
         global_search(),
         chat_header(),
         chat_history(),
