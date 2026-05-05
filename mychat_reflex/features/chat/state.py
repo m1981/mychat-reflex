@@ -443,68 +443,103 @@ class ChatState(rx.State):
     # ========================================================================
 
     def request_regenerate(self, message_id: str):
+        logger.info("=" * 80)
+        logger.info(f"[request_regenerate] 🔄 CALLED with message_id={message_id}")
+        logger.info(f"[request_regenerate] Current is_generating={self.is_generating}")
+        logger.info(f"[request_regenerate] Current messages count={len(self.messages)}")
+        logger.info("=" * 80)
+        
         if self.is_generating:
+            logger.warning(f"[request_regenerate] ⚠️ BLOCKED: is_generating={self.is_generating}")
             return rx.toast.warning("Already generating a response.")
 
         target_idx = next(
             (i for i, m in enumerate(self.messages) if m.id == message_id), -1
         )
         if target_idx == -1:
+            logger.error(f"[request_regenerate] ❌ Message not found: {message_id}")
             return rx.toast.error("Message not found.")
 
         target_msg = self.messages[target_idx]
         is_destructive = False
 
+        logger.info(f"[request_regenerate] Target message index={target_idx}, role={target_msg.role}")
+        logger.info(f"[request_regenerate] Total messages={len(self.messages)}")
+
         if target_msg.role == "assistant":
             if target_idx < len(self.messages) - 1:
                 is_destructive = True
+                logger.info(f"[request_regenerate] DESTRUCTIVE: Assistant message with {len(self.messages) - target_idx - 1} messages after it")
         else:
             if target_idx < len(self.messages) - 2:
                 is_destructive = True
+                logger.info(f"[request_regenerate] DESTRUCTIVE: User message with {len(self.messages) - target_idx - 2} messages after response")
 
         if is_destructive:
+            logger.info(f"[request_regenerate] 🚨 DESTRUCTIVE PATH: Showing warning modal")
             self.pending_regenerate_id = message_id
             self.show_truncate_warning = True
         else:
+            logger.info(f"[request_regenerate] ⚡ FAST PATH: Calling confirm_regenerate directly")
             # FAST PATH: Trigger regeneration immediately
             return ChatState.confirm_regenerate(message_id)
 
     def cancel_regenerate(self):
+        logger.info("[cancel_regenerate] 🚫 User cancelled regeneration")
         self.show_truncate_warning = False
         self.pending_regenerate_id = ""
 
     @rx.event(background=True)
     async def confirm_regenerate(self, message_id: str = ""):
         """Execute the regeneration using pure Use Cases."""
+        logger.info("=" * 80)
+        logger.info(f"[confirm_regenerate] 🎬 BACKGROUND EVENT STARTED")
+        logger.info(f"[confirm_regenerate] Received message_id={message_id!r}")
+        logger.info("=" * 80)
+        
         async with self:
+            logger.info(f"[confirm_regenerate] Inside async context - is_generating={self.is_generating}")
+            logger.info(f"[confirm_regenerate] pending_regenerate_id={self.pending_regenerate_id!r}")
+            
             self.show_truncate_warning = False
             # Use the passed message_id, or fall back to pending_regenerate_id
             target_message_id = message_id or self.pending_regenerate_id
             self.pending_regenerate_id = ""
             
+            logger.info(f"[confirm_regenerate] Resolved target_message_id={target_message_id!r}")
+            
             if not target_message_id:
+                logger.error("[confirm_regenerate] ❌ No message ID available!")
                 yield rx.toast.error("No message ID provided for regeneration.")
                 self.is_generating = False
                 return
                 
+            logger.info(f"[confirm_regenerate] ✅ Setting is_generating=True")
             self.is_generating = True
 
         # 1. Execute Business Logic (DB Truncation) via Use Case
+        logger.info(f"[confirm_regenerate] STEP 1: Executing PrepRegenerationUseCase")
         with rx.session() as session:
             prep_use_case = PrepRegenerationUseCase()
             try:
                 new_ai_msg_id, prompt_text, truncated_history = prep_use_case.execute(
                     session, self.current_conversation_id, target_message_id
                 )
+                logger.info(f"[confirm_regenerate] ✅ Prep complete: new_ai_msg_id={new_ai_msg_id}")
+                logger.info(f"[confirm_regenerate] Prompt text: {prompt_text[:100]}...")
+                logger.info(f"[confirm_regenerate] Truncated history length: {len(truncated_history)}")
             except ValueError as e:
+                logger.error(f"[confirm_regenerate] ❌ PrepRegenerationUseCase failed: {e}")
                 yield rx.toast.error(str(e))
                 async with self:
                     self.is_generating = False
                 return
 
         # 2. Sync UI State with the truncated history
+        logger.info(f"[confirm_regenerate] STEP 2: Syncing UI state")
         async with self:
             self.messages = [Message(**m.model_dump()) for m in truncated_history]
+            logger.info(f"[confirm_regenerate] Messages after truncation: {len(self.messages)}")
 
             # Add the empty AI placeholder returned by the Use Case
             ai_msg = Message(
@@ -515,20 +550,23 @@ class ChatState(rx.State):
             )
             self.messages.append(ai_msg)
             self.messages = self.messages
+            logger.info(f"[confirm_regenerate] Added AI placeholder, total messages: {len(self.messages)}")
 
         # 3. Stream the new response (Reusing SendMessageUseCase)
-        logger.info("[ChatState] Streaming regenerated response...")
+        logger.info("[confirm_regenerate] STEP 3: Streaming regenerated response...")
         async with self:
             current_model = str(self.selected_model)
             current_temp = self.temperature_float
             current_reasoning = self.enable_reasoning_bool
             current_budget = self.reasoning_budget_int
+            logger.info(f"[confirm_regenerate] Model config: {current_model}, temp={current_temp}, reasoning={current_reasoning}")
 
         llm_service = AppContainer.resolve_llm_service(current_model)
         stream_use_case = SendMessageUseCase(llm_service)
 
         full_response = ""
         chat_history = self.messages[:-2]
+        logger.info(f"[confirm_regenerate] Chat history for LLM: {len(chat_history)} messages")
 
         async for chunk in stream_use_case.execute(
                 conversation_id=self.current_conversation_id,
@@ -561,12 +599,16 @@ class ChatState(rx.State):
                 await asyncio.sleep(0.01)
 
         # 4. Save final message
+        logger.info(f"[confirm_regenerate] STEP 4: Saving final message (length={len(full_response)})")
         async with self:
             with rx.session() as session:
                 # Fetch the placeholder we created in the Prep Use Case and update it
                 ai_msg_final = session.query(Message).filter(Message.id == new_ai_msg_id).first()
                 if ai_msg_final:
                     ai_msg_final.content = full_response
+                    logger.info(f"[confirm_regenerate] ✅ Updated DB message {new_ai_msg_id}")
+                else:
+                    logger.error(f"[confirm_regenerate] ❌ Could not find message {new_ai_msg_id} in DB!")
 
                 conversation = session.query(Conversation).filter(
                     Conversation.id == self.current_conversation_id).first()
@@ -575,7 +617,10 @@ class ChatState(rx.State):
                 session.commit()
 
             self.messages[-1].content = full_response
+            logger.info(f"[confirm_regenerate] ✅ Setting is_generating=False")
             self.is_generating = False
             self.messages = self.messages
 
-        logger.info("[ChatState] ✅ REGENERATE COMPLETED")
+        logger.info("=" * 80)
+        logger.info("[confirm_regenerate] ✅ REGENERATE COMPLETED SUCCESSFULLY")
+        logger.info("=" * 80)
