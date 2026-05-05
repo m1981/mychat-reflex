@@ -90,10 +90,10 @@ def message_actions(message_id: str) -> rx.Component:
         )
 
     return rx.el.div(
-        _btn("copy", lambda: ChatState.copy_message(message_id)),
+        _btn("copy", ChatState.copy_message(message_id)),
         _btn("pencil"),
-        _btn("trash-2", lambda: ChatState.delete_message(message_id)),
-        _btn("rotate-cw", lambda: ChatState.regenerate_message(message_id)),
+        _btn("trash-2", ChatState.delete_message(message_id)),
+        _btn("rotate-cw", ChatState.regenerate_message(message_id)),
         class_name="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity",
     )
 
@@ -106,11 +106,12 @@ def message_bubble(message: Message, index: int) -> rx.Component:
         rx.el.div(
             rx.el.div(
                 rx.el.span(
-                    rx.cond(message.is_user, "User", "Model"),
+                    rx.cond(message.role == "user", "User", "Model"),
                     class_name=f"text-sm font-semibold {T['text_primary']}",
                 ),
-                rx.el.span(
-                    message.timestamp_formatted,
+                rx.moment(
+                    message.created_at,
+                    format="LT",
                     class_name=f"text-xs {T['text_muted']}",
                 ),
                 class_name="flex items-baseline gap-2 mb-1.5",
@@ -119,7 +120,7 @@ def message_bubble(message: Message, index: int) -> rx.Component:
             rx.el.div(
                 message_actions(message.id),
                 rx.cond(
-                    ~message.is_user,
+                    message.role != "user",
                     rx.el.span(
                         "4.2s",
                         class_name=f"ml-auto text-xs px-2 py-0.5 rounded-full {T['badge_muted']}",
@@ -296,7 +297,7 @@ def temperature_selector() -> rx.Component:
         rx.icon("thermometer", size=15, class_name="text-indigo-500 flex-shrink-0"),
         rx.el.span("Temp", class_name=f"text-sm font-medium {T['accent_text']}"),
         rx.el.span(
-            ChatState.temperature.to_string(),
+            ChatState.temperature,
             class_name=f"text-xs {T['text_faint']}",
         ),
         rx.icon("chevron-down", size=13, class_name=T["text_faint"]),
@@ -305,11 +306,11 @@ def temperature_selector() -> rx.Component:
     content = rx.el.div(
         rx.el.p("Temperature", class_name=T["popover_title"]),
         rx.el.p(
-            "Current: " + ChatState.temperature.to_string(),
+            "Current: " + ChatState.temperature,
             class_name=f"text-xs mb-3 px-1 {T['text_muted']}",
         ),
         rx.slider(
-            value=[ChatState.temperature],
+            value=[ChatState.temperature_float],
             on_value_commit=lambda v: ChatState.set_temperature(v[0]),
             min=0.0,
             max=2.0,
@@ -352,11 +353,14 @@ def _input_left() -> rx.Component:
             "key",
             extra=T["btn_blue_tint"],
         ),
+        model_selector(),
+        thinking_selector(),
+        temperature_selector(),
         pill_btn(
             rx.icon("layout-grid", size=14, class_name="flex-shrink-0"),
             rx.el.span("Tools", class_name="text-sm font-medium leading-none"),
         ),
-        class_name="flex items-center gap-2 flex-shrink-0",
+        class_name="flex items-center gap-2 flex-shrink-0 flex-wrap",
     )
 
 

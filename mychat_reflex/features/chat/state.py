@@ -492,7 +492,11 @@ class ChatState(rx.State):
     # ========================================================================
 
     def copy_message(self, message_id: str):
-        pass
+        """Copy message content to the user's clipboard."""
+        for m in self.messages:
+            if m.id == message_id:
+                return rx.set_clipboard(m.content)
+        return None
 
     def regenerate_message(self, message_id: str):
         pass

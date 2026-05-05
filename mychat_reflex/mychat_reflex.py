@@ -6,6 +6,7 @@ import reflex as rx
 from dotenv import load_dotenv  # 1. ADD THIS IMPORT
 
 from .pages.main import main_page
+from .features.chat.state import ChatState
 
 # 1. IMPORTS FOR DEPENDENCY INJECTION
 from .core.di import AppContainer
@@ -93,4 +94,4 @@ app = rx.App(
         "/styles.css",
     ],
 )
-app.add_page(index, title="Super Chat 2")
+app.add_page(index, title="Super Chat 2", on_load=ChatState.on_load)

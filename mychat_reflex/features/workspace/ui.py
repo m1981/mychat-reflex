@@ -51,7 +51,7 @@ def sidebar_search() -> rx.Component:
     )
 
 
-def chat_item(chat_id: str, chat_title: str) -> rx.Component:
+def chat_item(chat: rx.Var) -> rx.Component:
     return rx.el.li(
         nav_item(
             rx.icon(
@@ -59,44 +59,48 @@ def chat_item(chat_id: str, chat_title: str) -> rx.Component:
                 size=14,
                 class_name=f"mr-2 flex-shrink-0 {T['text_faint']}",
             ),
-            rx.el.span(chat_title),
-            on_click=lambda: ChatState.select_chat(chat_id),
+            rx.el.span(chat.title),
+            on_click=ChatState.select_chat(chat.id),
         ),
         class_name="list-none",
     )
 
 
-def folder_section(
-    folder_name: str,
-    chats: list[tuple[str, str]],
-) -> rx.Component:
-    return rx.el.div(
-        rx.el.p(
-            folder_name,
-            class_name=(
-                f"text-[11px] font-semibold uppercase tracking-wider "
-                f"px-3 mb-1.5 mt-3 {T['text_muted']}"
-            ),
-        ),
-        rx.el.ul(
-            *[chat_item(cid, title) for cid, title in chats],
-            class_name="space-y-0.5",
+def folder_header(folder: rx.Var) -> rx.Component:
+    return rx.el.p(
+        folder.name,
+        class_name=(
+            f"text-[11px] font-semibold uppercase tracking-wider "
+            f"px-3 mb-1.5 mt-3 {T['text_muted']}"
         ),
     )
 
 
 def navigation_list() -> rx.Component:
     return rx.el.nav(
-        folder_section(
-            "Job offers",
-            [("cv-update", "CV update"), ("email-prep", "Email preparation")],
+        rx.el.p(
+            "Chats",
+            class_name=(
+                f"text-[11px] font-semibold uppercase tracking-wider "
+                f"px-3 mb-1.5 mt-3 {T['text_muted']}"
+            ),
         ),
-        folder_section(
-            "ESP32 projects",
-            [
-                ("esp32-overview", "ESP32 overview"),
-                ("first-project", "First ESP project"),
-            ],
+        rx.el.ul(
+            rx.foreach(ChatState.chats, chat_item),
+            class_name="space-y-0.5",
+        ),
+        rx.cond(
+            ChatState.folders.length() > 0,
+            rx.el.div(
+                rx.el.p(
+                    "Folders",
+                    class_name=(
+                        f"text-[11px] font-semibold uppercase tracking-wider "
+                        f"px-3 mb-1.5 mt-3 {T['text_muted']}"
+                    ),
+                ),
+                rx.foreach(ChatState.filtered_folders, folder_header),
+            ),
         ),
         class_name="flex-1 overflow-y-auto px-2 pb-4",
     )
