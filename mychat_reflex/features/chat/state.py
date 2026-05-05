@@ -808,44 +808,32 @@ class ChatState(rx.State):
     # ========================================================================
 
     def dump_database(self):
-        """Print all database contents in LLM-friendly format."""
-        logger.info("=" * 80)
-        logger.info("DATABASE DUMP - START")
-        logger.info("=" * 80)
-
+        """Write all database contents to db-dump.txt in clear hierarchical format."""
+        output_file = "db-dump.txt"
+        
         with rx.session() as session:
             # Fetch all data
             all_folders = session.query(ChatFolder).all()
             all_conversations = session.query(Conversation).all()
             all_messages = session.query(Message).all()
 
-            # Print summary
-            logger.info(f"\n📊 SUMMARY:")
-            logger.info(f"  Folders: {len(all_folders)}")
-            logger.info(f"  Conversations: {len(all_conversations)}")
-            logger.info(f"  Messages: {len(all_messages)}")
-
-            # Print Folders
-            logger.info(f"\n📁 FOLDERS ({len(all_folders)}):")
-            for folder in all_folders:
-                logger.info(f"  - ID: {folder.id}")
-                logger.info(f"    Name: {folder.name}")
-                logger.info(f"    Created: {folder.created_at}")
-                logger.info("")
-
-            # Print Conversations
-            logger.info(f"\n💬 CONVERSATIONS ({len(all_conversations)}):")
-            for conv in all_conversations:
-                logger.info(f"  - ID: {conv.id}")
-                logger.info(f"    Title: {conv.title}")
-                logger.info(f"    Folder ID: {conv.folder_id or 'None (unfiled)'}")
-                logger.info(f"    Created: {conv.created_at}")
-                logger.info(f"    Updated: {conv.updated_at}")
-                logger.info("")
-
-            # Print hierarchical structure: Folders -> Conversations -> Messages
-            logger.info(f"\n📂 HIERARCHICAL STRUCTURE:")
-            logger.info("=" * 60)
+            # Build output as a list of lines
+            lines = []
+            lines.append("=" * 80)
+            lines.append("DATABASE DUMP")
+            lines.append("=" * 80)
+            lines.append("")
+            
+            # Summary
+            lines.append("📊 SUMMARY:")
+            lines.append(f"  Folders: {len(all_folders)}")
+            lines.append(f"  Conversations: {len(all_conversations)}")
+            lines.append(f"  Messages: {len(all_messages)}")
+            lines.append("")
+            
+            # Hierarchical structure: Folders -> Conversations -> Messages
+            lines.append("📂 HIERARCHICAL STRUCTURE:")
+            lines.append("=" * 60)
             
             # Group messages by conversation
             messages_by_conv = {}
@@ -856,17 +844,18 @@ class ChatState(rx.State):
             
             # Print folders with their conversations
             for folder in all_folders:
-                logger.info(f"\n📁 {folder.name} (ID: {folder.id})")
+                lines.append("")
+                lines.append(f"📁 {folder.name} (ID: {folder.id})")
                 folder_convs = [c for c in all_conversations if c.folder_id == folder.id]
                 
                 if not folder_convs:
-                    logger.info("  └─ (empty)")
+                    lines.append("  └─ (empty)")
                     continue
                 
                 for i, conv in enumerate(folder_convs):
                     is_last_conv = (i == len(folder_convs) - 1)
                     conv_prefix = "└─" if is_last_conv else "├─"
-                    logger.info(f"  {conv_prefix} 💬 {conv.title} (ID: {conv.id})")
+                    lines.append(f"  {conv_prefix} 💬 {conv.title} (ID: {conv.id})")
                     
                     # Print messages for this conversation
                     conv_messages = messages_by_conv.get(conv.id, [])
@@ -879,16 +868,17 @@ class ChatState(rx.State):
                         if len(msg.content) > 30:
                             content_preview += "..."
                         
-                        logger.info(f"{msg_indent}{msg_prefix} [{msg.role}] {content_preview}")
+                        lines.append(f"{msg_indent}{msg_prefix} [{msg.role}] {content_preview}")
             
             # Print unfiled conversations
             unfiled_convs = [c for c in all_conversations if c.folder_id is None]
             if unfiled_convs:
-                logger.info(f"\n📋 UNFILED CHATS")
+                lines.append("")
+                lines.append("📋 UNFILED CHATS")
                 for i, conv in enumerate(unfiled_convs):
                     is_last_conv = (i == len(unfiled_convs) - 1)
                     conv_prefix = "└─" if is_last_conv else "├─"
-                    logger.info(f"  {conv_prefix} 💬 {conv.title} (ID: {conv.id})")
+                    lines.append(f"  {conv_prefix} 💬 {conv.title} (ID: {conv.id})")
                     
                     # Print messages for this conversation
                     conv_messages = messages_by_conv.get(conv.id, [])
@@ -901,51 +891,26 @@ class ChatState(rx.State):
                         if len(msg.content) > 30:
                             content_preview += "..."
                         
-                        logger.info(f"{msg_indent}{msg_prefix} [{msg.role}] {content_preview}")
-
-            # JSON export for easy parsing
-            logger.info("\n" + "=" * 80)
-            logger.info("JSON EXPORT (for LLM parsing):")
-            logger.info("=" * 80)
+                        lines.append(f"{msg_indent}{msg_prefix} [{msg.role}] {content_preview}")
             
-            export_data = {
-                "folders": [
-                    {
-                        "id": f.id,
-                        "name": f.name,
-                        "created_at": f.created_at.isoformat() if f.created_at else None,
-                    }
-                    for f in all_folders
-                ],
-                "conversations": [
-                    {
-                        "id": c.id,
-                        "title": c.title,
-                        "folder_id": c.folder_id,
-                        "created_at": c.created_at.isoformat() if c.created_at else None,
-                        "updated_at": c.updated_at.isoformat() if c.updated_at else None,
-                    }
-                    for c in all_conversations
-                ],
-                "messages": [
-                    {
-                        "id": m.id,
-                        "conversation_id": m.conversation_id,
-                        "role": m.role,
-                        "content": m.content,
-                        "created_at": m.created_at.isoformat() if m.created_at else None,
-                    }
-                    for m in all_messages
-                ],
-            }
+            lines.append("")
+            lines.append("=" * 80)
+            lines.append("END OF DUMP")
+            lines.append("=" * 80)
+
+        # Write to file
+        try:
+            with open(output_file, "w", encoding="utf-8") as f:
+                f.write("\n".join(lines))
             
-            logger.info(json.dumps(export_data, indent=2))
-
-        logger.info("\n" + "=" * 80)
-        logger.info("DATABASE DUMP - END")
-        logger.info("=" * 80)
-
-        return rx.toast.success(
-            "Database dumped to console! Check terminal logs.",
-            position="bottom-right"
-        )
+            logger.info(f"✅ Database dumped to {output_file}")
+            return rx.toast.success(
+                f"Database dumped to {output_file}!",
+                position="bottom-right"
+            )
+        except Exception as e:
+            logger.error(f"❌ Failed to write dump file: {e}")
+            return rx.toast.error(
+                f"Failed to write dump file: {e}",
+                position="bottom-right"
+            )
