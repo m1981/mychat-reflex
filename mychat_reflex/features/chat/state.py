@@ -142,7 +142,7 @@ class ChatState(rx.State):
     # ========================================================================
 
     @rx.var
-    def active_code_theme(self) -> str:
+    def active_code_theme(self) -> rx.Var[str]:
         """Returns the appropriate code theme based on current color mode.
         
         This uses rx.color_mode_cond which evaluates at render time in the browser.
