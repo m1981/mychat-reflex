@@ -46,7 +46,6 @@ def _shiki_code_block(text, **props):
     return ShikiHighLevelCodeBlock.create(
         text,
         language=props.get("language"),
-        theme="nord",
         themes=DYNAMIC_CODE_THEME_CONFIG,
         show_line_numbers=False,
         wrap_long_lines=True,
