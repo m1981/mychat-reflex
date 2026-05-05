@@ -59,6 +59,7 @@ class ChatState(rx.State):
     # Input state
     input_text: str = ""
     is_generating: bool = False
+    is_loading: bool = True
 
     # Sidebar state
     sidebar_search: str = ""
@@ -186,6 +187,7 @@ class ChatState(rx.State):
             self.folders = [ChatFolder(**f.model_dump()) for f in db_folders]
             self.chats = [Conversation(**c.model_dump()) for c in db_chats]
         
+        self.is_loading = False
         logger.info(f"[ChatState.on_load] ✅ Loaded {len(self.messages)} messages, {len(self.chats)} chats")
 
     # ========================================================================
@@ -199,6 +201,7 @@ class ChatState(rx.State):
         self.sidebar_search = value
 
     async def select_chat(self, chat_id: str):
+        self.is_loading = True
         self.current_conversation_id = chat_id
         for chat in self.chats:
             if chat.id == chat_id:
@@ -209,6 +212,8 @@ class ChatState(rx.State):
         with rx.session() as session:
             db_messages = await use_case.execute(session, chat_id)
             self.messages = [Message(**m.model_dump()) for m in db_messages]
+        
+        self.is_loading = False
 
     def create_new_chat(self):
         new_id = str(uuid4())
@@ -454,8 +459,13 @@ class ChatState(rx.State):
         logger.info("=" * 80)
         logger.info(f"[request_regenerate] 🔄 CALLED with message_id={message_id}")
         logger.info(f"[request_regenerate] Current is_generating={self.is_generating}")
+        logger.info(f"[request_regenerate] Current is_loading={self.is_loading}")
         logger.info(f"[request_regenerate] Current messages count={len(self.messages)}")
         logger.info("=" * 80)
+        
+        if self.is_loading:
+            logger.warning(f"[request_regenerate] ⚠️ BLOCKED: Still loading messages")
+            return rx.toast.warning("Please wait, loading messages...")
         
         if self.is_generating:
             logger.warning(f"[request_regenerate] ⚠️ BLOCKED: is_generating={self.is_generating}")
