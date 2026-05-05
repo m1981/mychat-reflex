@@ -36,15 +36,26 @@ DARK_CODE_THEMES = (
 def _shiki_code_block(text, **props):
     """
     Shiki code block that responds to Reflex state.
-    Uses ChatState.active_code_theme which contains rx.color_mode_cond.
+    Uses rx.cond to render different ShikiCodeBlock instances for light/dark mode.
     """
-    return ShikiHighLevelCodeBlock.create(
-        text,
-        language=props.get("language"),
-        theme=ChatState.active_code_theme,
-        show_line_numbers=False,
-        wrap_long_lines=True,
-        width="100%",
+    return rx.cond(
+        rx.color_mode == "light",
+        ShikiHighLevelCodeBlock.create(
+            text,
+            language=props.get("language"),
+            theme=ChatState.light_code_theme,
+            show_line_numbers=False,
+            wrap_long_lines=True,
+            width="100%",
+        ),
+        ShikiHighLevelCodeBlock.create(
+            text,
+            language=props.get("language"),
+            theme=ChatState.code_theme,
+            show_line_numbers=False,
+            wrap_long_lines=True,
+            width="100%",
+        ),
     )
 
 
