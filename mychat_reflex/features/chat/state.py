@@ -141,13 +141,6 @@ class ChatState(rx.State):
     # UI DISPLAY COMPUTED VARS
     # ========================================================================
 
-    @rx.var
-    def active_code_theme(self) -> rx.Var[str]:
-        """Returns the appropriate code theme based on current color mode.
-        
-        This uses rx.color_mode_cond which evaluates at render time in the browser.
-        """
-        return rx.color_mode_cond(self.light_code_theme, self.code_theme)
 
     @rx.var
     def model_display_name(self) -> str:
