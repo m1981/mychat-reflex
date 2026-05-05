@@ -442,14 +442,7 @@ def debug_dump_button() -> rx.Component:
     """Debug button to dump state and localStorage."""
     return rx.el.button(
         rx.icon("bug", size=17),
-        on_click=rx.console_log(
-            "State:",
-            {
-                "code_theme": ChatState.code_theme,
-                "light_code_theme": ChatState.light_code_theme,
-                "active_code_theme": ChatState.active_code_theme,
-            },
-        ),
+        on_click=rx.console_log(ChatState.active_code_theme),
         class_name=(
             f"h-9 w-9 rounded-full flex items-center justify-center "
             f"cursor-pointer transition-colors "
