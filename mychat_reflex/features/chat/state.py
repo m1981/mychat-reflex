@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from typing import Optional, TypedDict
 from uuid import uuid4
 import asyncio
+import json
 
 from mychat_reflex.core.di import AppContainer
 from mychat_reflex.core.llm_ports import LLMConfig
@@ -801,3 +802,114 @@ class ChatState(rx.State):
         logger.info("=" * 80)
         logger.info("[confirm_regenerate] ✅ REGENERATE COMPLETED SUCCESSFULLY")
         logger.info("=" * 80)
+
+    # ========================================================================
+    # DEBUG: DATABASE DUMP
+    # ========================================================================
+
+    def dump_database(self):
+        """Print all database contents in LLM-friendly format."""
+        logger.info("=" * 80)
+        logger.info("DATABASE DUMP - START")
+        logger.info("=" * 80)
+
+        with rx.session() as session:
+            # Fetch all data
+            all_folders = session.query(ChatFolder).all()
+            all_conversations = session.query(Conversation).all()
+            all_messages = session.query(Message).all()
+
+            # Print summary
+            logger.info(f"\n📊 SUMMARY:")
+            logger.info(f"  Folders: {len(all_folders)}")
+            logger.info(f"  Conversations: {len(all_conversations)}")
+            logger.info(f"  Messages: {len(all_messages)}")
+
+            # Print Folders
+            logger.info(f"\n📁 FOLDERS ({len(all_folders)}):")
+            for folder in all_folders:
+                logger.info(f"  - ID: {folder.id}")
+                logger.info(f"    Name: {folder.name}")
+                logger.info(f"    Created: {folder.created_at}")
+                logger.info("")
+
+            # Print Conversations
+            logger.info(f"\n💬 CONVERSATIONS ({len(all_conversations)}):")
+            for conv in all_conversations:
+                logger.info(f"  - ID: {conv.id}")
+                logger.info(f"    Title: {conv.title}")
+                logger.info(f"    Folder ID: {conv.folder_id or 'None (unfiled)'}")
+                logger.info(f"    Created: {conv.created_at}")
+                logger.info(f"    Updated: {conv.updated_at}")
+                logger.info("")
+
+            # Print Messages (grouped by conversation)
+            logger.info(f"\n📝 MESSAGES ({len(all_messages)}):")
+            messages_by_conv = {}
+            for msg in all_messages:
+                if msg.conversation_id not in messages_by_conv:
+                    messages_by_conv[msg.conversation_id] = []
+                messages_by_conv[msg.conversation_id].append(msg)
+
+            for conv_id, messages in messages_by_conv.items():
+                conv_title = next(
+                    (c.title for c in all_conversations if c.id == conv_id),
+                    "Unknown"
+                )
+                logger.info(f"\n  Conversation: {conv_title} ({conv_id})")
+                logger.info(f"  Message count: {len(messages)}")
+                for i, msg in enumerate(messages, 1):
+                    logger.info(f"\n    [{i}] {msg.role.upper()}")
+                    logger.info(f"        ID: {msg.id}")
+                    logger.info(f"        Timestamp: {msg.created_at}")
+                    content_preview = msg.content[:100].replace('\n', '\\n')
+                    if len(msg.content) > 100:
+                        content_preview += "..."
+                    logger.info(f"        Content: {content_preview}")
+
+            # JSON export for easy parsing
+            logger.info("\n" + "=" * 80)
+            logger.info("JSON EXPORT (for LLM parsing):")
+            logger.info("=" * 80)
+            
+            export_data = {
+                "folders": [
+                    {
+                        "id": f.id,
+                        "name": f.name,
+                        "created_at": f.created_at.isoformat() if f.created_at else None,
+                    }
+                    for f in all_folders
+                ],
+                "conversations": [
+                    {
+                        "id": c.id,
+                        "title": c.title,
+                        "folder_id": c.folder_id,
+                        "created_at": c.created_at.isoformat() if c.created_at else None,
+                        "updated_at": c.updated_at.isoformat() if c.updated_at else None,
+                    }
+                    for c in all_conversations
+                ],
+                "messages": [
+                    {
+                        "id": m.id,
+                        "conversation_id": m.conversation_id,
+                        "role": m.role,
+                        "content": m.content,
+                        "created_at": m.created_at.isoformat() if m.created_at else None,
+                    }
+                    for m in all_messages
+                ],
+            }
+            
+            logger.info(json.dumps(export_data, indent=2))
+
+        logger.info("\n" + "=" * 80)
+        logger.info("DATABASE DUMP - END")
+        logger.info("=" * 80)
+
+        return rx.toast.success(
+            "Database dumped to console! Check terminal logs.",
+            position="bottom-right"
+        )

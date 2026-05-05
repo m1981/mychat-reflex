@@ -220,6 +220,11 @@ def sidebar_footer() -> rx.Component:
     return rx.el.div(
         rx.color_mode.button(size="2", cursor="pointer"),
         footer_btn(
+            rx.icon("database", size=16),
+            rx.el.span("Dump DB"),
+            on_click=ChatState.dump_database,
+        ),
+        footer_btn(
             rx.icon("settings", size=16),
             rx.el.span("Settings"),
         ),
