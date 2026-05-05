@@ -18,7 +18,7 @@ import asyncio
 from mychat_reflex.core.di import AppContainer
 from mychat_reflex.core.llm_ports import LLMConfig
 from .models import Message, Conversation, ChatFolder
-from .use_cases import SendMessageUseCase, LoadHistoryUseCase
+from .use_cases import SendMessageUseCase, LoadHistoryUseCase, PrepRegenerationUseCase
 
 logger = logging.getLogger(__name__)
 
@@ -476,48 +476,31 @@ class ChatState(rx.State):
 
     @rx.event(background=True)
     async def confirm_regenerate(self, direct_message_id: str = ""):
+        """Execute the regeneration using pure Use Cases."""
         async with self:
             self.show_truncate_warning = False
-            # Use direct ID if provided (fast path), otherwise use pending ID (modal path)
             message_id = direct_message_id or self.pending_regenerate_id
             self.pending_regenerate_id = ""
-
-            target_idx = next(
-                (i for i, m in enumerate(self.messages) if m.id == message_id), -1
-            )
-            if target_idx == -1:
-                yield rx.toast.error("Error: Could not find message to regenerate.")
-                return
-
-            target_msg = self.messages[target_idx]
-
-            if target_msg.role == "assistant":
-                if target_idx == 0 or self.messages[target_idx - 1].role != "user":
-                    yield rx.toast.error("Could not find the original user prompt.")
-                    return
-                prompt_text = self.messages[target_idx - 1].content
-                delete_from_idx = target_idx
-            else:
-                prompt_text = target_msg.content
-                delete_from_idx = target_idx + 1
-
-            messages_to_delete = self.messages[delete_from_idx:]
-            ids_to_delete = [m.id for m in messages_to_delete]
-
             self.is_generating = True
 
-        if ids_to_delete:
-            with rx.session() as session:
-                session.query(Message).filter(Message.id.in_(ids_to_delete)).delete(
-                    synchronize_session=False
+        # 1. Execute Business Logic (DB Truncation) via Use Case
+        with rx.session() as session:
+            prep_use_case = PrepRegenerationUseCase()
+            try:
+                new_ai_msg_id, prompt_text, truncated_history = prep_use_case.execute(
+                    session, self.current_conversation_id, message_id
                 )
-                session.commit()
+            except ValueError as e:
+                yield rx.toast.error(str(e))
+                async with self:
+                    self.is_generating = False
+                return
 
+        # 2. Sync UI State with the truncated history
         async with self:
-            self.messages = self.messages[:delete_from_idx]
+            self.messages = [Message(**m.model_dump()) for m in truncated_history]
 
-        new_ai_msg_id = str(uuid4())
-        async with self:
+            # Add the empty AI placeholder returned by the Use Case
             ai_msg = Message(
                 id=new_ai_msg_id,
                 conversation_id=self.current_conversation_id,
@@ -527,9 +510,8 @@ class ChatState(rx.State):
             self.messages.append(ai_msg)
             self.messages = self.messages
 
-        # 4. Stream the new response
+        # 3. Stream the new response (Reusing SendMessageUseCase)
         logger.info("[ChatState] Streaming regenerated response...")
-
         async with self:
             current_model = str(self.selected_model)
             current_temp = self.temperature_float
@@ -537,21 +519,20 @@ class ChatState(rx.State):
             current_budget = self.reasoning_budget_int
 
         llm_service = AppContainer.resolve_llm_service(current_model)
-        use_case = SendMessageUseCase(llm_service)
+        stream_use_case = SendMessageUseCase(llm_service)
 
         full_response = ""
-        # History is everything BEFORE the user prompt
         chat_history = self.messages[:-2]
 
-        async for chunk in use_case.execute(
-            conversation_id=self.current_conversation_id,
-            user_message=prompt_text,
-            history=chat_history,
-            config=LLMConfig(
-                temperature=current_temp,
-                enable_reasoning=current_reasoning,
-                reasoning_budget=current_budget,
-            ),
+        async for chunk in stream_use_case.execute(
+                conversation_id=self.current_conversation_id,
+                user_message=prompt_text,
+                history=chat_history,
+                config=LLMConfig(
+                    temperature=current_temp,
+                    enable_reasoning=current_reasoning,
+                    reasoning_budget=current_budget,
+                ),
         ):
             char_buffer = ""
             for char in chunk:
@@ -560,9 +541,7 @@ class ChatState(rx.State):
 
                 if len(char_buffer) >= 40:
                     async with self:
-                        self.messages[-1].content = _close_open_code_block(
-                            full_response
-                        )
+                        self.messages[-1].content = _close_open_code_block(full_response)
                         self.messages = self.messages
                     yield
                     await asyncio.sleep(0.01)
@@ -575,16 +554,18 @@ class ChatState(rx.State):
                 yield
                 await asyncio.sleep(0.01)
 
-        # 5. Save the final regenerated message to DB
+        # 4. Save final message
         async with self:
             with rx.session() as session:
-                ai_msg_final = Message(
-                    id=new_ai_msg_id,
-                    conversation_id=self.current_conversation_id,
-                    role="assistant",
-                    content=full_response,
-                )
-                session.add(ai_msg_final)
+                # Fetch the placeholder we created in the Prep Use Case and update it
+                ai_msg_final = session.query(Message).filter(Message.id == new_ai_msg_id).first()
+                if ai_msg_final:
+                    ai_msg_final.content = full_response
+
+                conversation = session.query(Conversation).filter(
+                    Conversation.id == self.current_conversation_id).first()
+                if conversation:
+                    conversation.updated_at = datetime.now(timezone.utc)
                 session.commit()
 
             self.messages[-1].content = full_response
