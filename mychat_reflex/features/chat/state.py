@@ -843,29 +843,65 @@ class ChatState(rx.State):
                 logger.info(f"    Updated: {conv.updated_at}")
                 logger.info("")
 
-            # Print Messages (grouped by conversation)
-            logger.info(f"\n📝 MESSAGES ({len(all_messages)}):")
+            # Print hierarchical structure: Folders -> Conversations -> Messages
+            logger.info(f"\n📂 HIERARCHICAL STRUCTURE:")
+            logger.info("=" * 60)
+            
+            # Group messages by conversation
             messages_by_conv = {}
             for msg in all_messages:
                 if msg.conversation_id not in messages_by_conv:
                     messages_by_conv[msg.conversation_id] = []
                 messages_by_conv[msg.conversation_id].append(msg)
-
-            for conv_id, messages in messages_by_conv.items():
-                conv_title = next(
-                    (c.title for c in all_conversations if c.id == conv_id),
-                    "Unknown"
-                )
-                logger.info(f"\n  Conversation: {conv_title} ({conv_id})")
-                logger.info(f"  Message count: {len(messages)}")
-                for i, msg in enumerate(messages, 1):
-                    logger.info(f"\n    [{i}] {msg.role.upper()}")
-                    logger.info(f"        ID: {msg.id}")
-                    logger.info(f"        Timestamp: {msg.created_at}")
-                    content_preview = msg.content[:100].replace('\n', '\\n')
-                    if len(msg.content) > 100:
-                        content_preview += "..."
-                    logger.info(f"        Content: {content_preview}")
+            
+            # Print folders with their conversations
+            for folder in all_folders:
+                logger.info(f"\n📁 {folder.name} (ID: {folder.id})")
+                folder_convs = [c for c in all_conversations if c.folder_id == folder.id]
+                
+                if not folder_convs:
+                    logger.info("  └─ (empty)")
+                    continue
+                
+                for i, conv in enumerate(folder_convs):
+                    is_last_conv = (i == len(folder_convs) - 1)
+                    conv_prefix = "└─" if is_last_conv else "├─"
+                    logger.info(f"  {conv_prefix} 💬 {conv.title} (ID: {conv.id})")
+                    
+                    # Print messages for this conversation
+                    conv_messages = messages_by_conv.get(conv.id, [])
+                    for j, msg in enumerate(conv_messages):
+                        is_last_msg = (j == len(conv_messages) - 1)
+                        msg_indent = "     " if is_last_conv else "  │  "
+                        msg_prefix = "└─" if is_last_msg else "├─"
+                        
+                        content_preview = msg.content[:30].replace('\n', '\\n')
+                        if len(msg.content) > 30:
+                            content_preview += "..."
+                        
+                        logger.info(f"{msg_indent}{msg_prefix} [{msg.role}] {content_preview}")
+            
+            # Print unfiled conversations
+            unfiled_convs = [c for c in all_conversations if c.folder_id is None]
+            if unfiled_convs:
+                logger.info(f"\n📋 UNFILED CHATS")
+                for i, conv in enumerate(unfiled_convs):
+                    is_last_conv = (i == len(unfiled_convs) - 1)
+                    conv_prefix = "└─" if is_last_conv else "├─"
+                    logger.info(f"  {conv_prefix} 💬 {conv.title} (ID: {conv.id})")
+                    
+                    # Print messages for this conversation
+                    conv_messages = messages_by_conv.get(conv.id, [])
+                    for j, msg in enumerate(conv_messages):
+                        is_last_msg = (j == len(conv_messages) - 1)
+                        msg_indent = "     " if is_last_conv else "  │  "
+                        msg_prefix = "└─" if is_last_msg else "├─"
+                        
+                        content_preview = msg.content[:30].replace('\n', '\\n')
+                        if len(msg.content) > 30:
+                            content_preview += "..."
+                        
+                        logger.info(f"{msg_indent}{msg_prefix} [{msg.role}] {content_preview}")
 
             # JSON export for easy parsing
             logger.info("\n" + "=" * 80)
