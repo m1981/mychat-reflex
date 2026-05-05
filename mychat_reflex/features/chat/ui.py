@@ -76,7 +76,8 @@ def _message_markdown(content: str, is_streaming: bool) -> rx.Component:
     )
 
 
-def message_actions(message_id: str) -> rx.Component:
+def message_actions(message: Message) -> rx.Component:
+    """Action buttons for a message."""
     btn_cls = (
         f"h-7 w-7 rounded-md flex items-center justify-center cursor-pointer "
         f"transition-colors {T['btn_action']}"
@@ -84,23 +85,66 @@ def message_actions(message_id: str) -> rx.Component:
 
     def _btn(icon, on_click=None):
         return rx.el.button(
-            rx.icon(icon, size=14),
-            on_click=on_click,
-            class_name=btn_cls,
+            rx.icon(icon, size=14), on_click=on_click, class_name=btn_cls
         )
 
     return rx.el.div(
-        _btn("copy", ChatState.copy_message(message_id)),
-        _btn("pencil"),
-        _btn("trash-2", ChatState.delete_message(message_id)),
-        _btn("rotate-cw", ChatState.regenerate_message(message_id)),
+        _btn("copy", ChatState.copy_message(message.id)),
+        # Edit button (Only for User messages)
+        rx.cond(
+            message.role == "user",
+            _btn("pencil", lambda: ChatState.start_edit(message.id, message.content)),
+            rx.fragment(),
+        ),
+        _btn("trash-2", ChatState.delete_message(message.id)),
+        # Regenerate button (Uses the new request_regenerate flow with the warning modal)
+        _btn("rotate-cw", lambda: ChatState.request_regenerate(message.id)),
         class_name="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity",
     )
 
 
 def message_bubble(message: Message, index: int) -> rx.Component:
+    """A single message bubble (user or AI) with inline editing."""
     is_last = index == (ChatState.messages.length() - 1)
     is_streaming = is_last & ChatState.is_generating
+    is_editing = ChatState.editing_message_id == message.id
+
+    # The standard markdown view
+    standard_view = rx.el.div(
+        _message_markdown(message.content, is_streaming),
+        rx.el.div(
+            message_actions(message),  # Pass the whole message object now
+            rx.cond(
+                message.role != "user",
+                rx.el.span(
+                    "4.2s",
+                    class_name=f"ml-auto text-xs px-2 py-0.5 rounded-full {T['badge_muted']}",
+                ),
+            ),
+            class_name="flex items-center mt-3",
+        ),
+    )
+
+    # The edit mode view
+    edit_view = rx.el.div(
+        rx.text_area(
+            value=ChatState.edit_content,
+            on_change=ChatState.set_edit_content,
+            class_name=f"w-full p-3 rounded-lg border {T['border_divider']} {T['surface_app']} focus:ring-2 outline-none text-sm mb-3",
+            rows="4",
+        ),
+        rx.el.div(
+            rx.button(
+                "Cancel",
+                on_click=ChatState.cancel_edit,
+                variant="soft",
+                color_scheme="gray",
+                size="2",
+            ),
+            rx.button("Save & Submit", on_click=ChatState.save_edit, size="2"),
+            class_name="flex justify-end gap-2",
+        ),
+    )
 
     return rx.el.div(
         rx.el.div(
@@ -116,18 +160,8 @@ def message_bubble(message: Message, index: int) -> rx.Component:
                 ),
                 class_name="flex items-baseline gap-2 mb-1.5",
             ),
-            _message_markdown(message.content, is_streaming),
-            rx.el.div(
-                message_actions(message.id),
-                rx.cond(
-                    message.role != "user",
-                    rx.el.span(
-                        "4.2s",
-                        class_name=f"ml-auto text-xs px-2 py-0.5 rounded-full {T['badge_muted']}",
-                    ),
-                ),
-                class_name="flex items-center mt-3",
-            ),
+            # Toggle between standard view and edit view
+            rx.cond(is_editing, edit_view, standard_view),
             class_name="flex-1 min-w-0",
         ),
         class_name=(

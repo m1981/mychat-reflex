@@ -1,51 +1,50 @@
 """
-Dependency Injection Container (Service Locator).
+Dependency Injection Container (Factory Pattern).
 
 Architectural Note:
 This file lives in the `core`. It MUST NOT import anything from `infrastructure`.
-The Composition Root (mychat_reflex.py) or the Test Suite is responsible for
-calling `register_llm_service` with the concrete adapter.
+It holds a factory function registered by the Composition Root, ensuring that
+every user request gets a fresh, thread-safe instance of the LLM adapter.
 """
 
 import logging
-from typing import Optional
+from typing import Callable, Optional
 from mychat_reflex.core.llm_ports import ILLMService
 
 logger = logging.getLogger(__name__)
 
 
 class AppContainer:
-    """Service Locator for Dependency Injection."""
+    """Service Locator / Factory for Dependency Injection."""
 
-    _llm_service: Optional[ILLMService] = None
-
-    @classmethod
-    def register_llm_service(cls, service: ILLMService):
-        """
-        Register the concrete LLM service.
-        Called at app startup (mychat_reflex.py) or during test setup.
-        """
-        cls._llm_service = service
-        logger.info(
-            f"[AppContainer] ✅ Registered LLM Service: {type(service).__name__}"
-        )
+    _llm_factory: Optional[Callable[[str], ILLMService]] = None
 
     @classmethod
-    def resolve_llm_service(cls) -> ILLMService:
+    def register_llm_factory(cls, factory_func: Callable[[str], ILLMService]):
         """
-        Resolve the LLM service for use in Use Cases or State.
+        Register the factory function that builds concrete LLM services.
+        Called at app startup (mychat_reflex.py).
         """
-        if cls._llm_service is None:
+        cls._llm_factory = factory_func
+        logger.info("[AppContainer] ✅ Registered LLM Factory Function.")
+
+    @classmethod
+    def resolve_llm_service(cls, model_name: str) -> ILLMService:
+        """
+        Build and return a fresh LLM service for the requested model.
+        This ensures multi-user thread safety in Reflex.
+        """
+        if cls._llm_factory is None:
             logger.error(
                 "[AppContainer] ❌ Attempted to resolve LLM Service before initialization!"
             )
             raise RuntimeError(
-                "LLM Service not initialized in AppContainer. Call register_llm_service first."
+                "LLM Factory not initialized in AppContainer. Call register_llm_factory first."
             )
 
-        return cls._llm_service
+        return cls._llm_factory(model_name)
 
     @classmethod
     def clear(cls):
         """Clear the container (useful for test teardown)."""
-        cls._llm_service = None
+        cls._llm_factory = None

@@ -3,7 +3,7 @@ Chat State - UI Controller for Chat Feature.
 
 Architectural Rules Applied:
 1. ViewModel Pattern: This class only manages UI state and delegates business logic to Use Cases.
-2. Dependency Injection (ADR 015): Resolves ILLMService via AppContainer, removing vendor lock-in.
+2. Dependency Injection (ADR 015): Resolves ILLMService via AppContainer Factory, removing vendor lock-in.
 3. WebSocket Buffering (ADR 002-V2): Batches LLM chunks before yielding to prevent UI freezing.
 4. Safe DB Sessions: rx.session() is opened, passed to Use Cases, and closed immediately.
 """
@@ -65,84 +65,48 @@ class ChatState(rx.State):
     folders: list[ChatFolder] = []
     chats: list[Conversation] = []
 
+    # Inline Edit State
+    editing_message_id: str = ""
+    edit_content: str = ""
+
+    # Destructive Action Warning State
+    show_truncate_warning: bool = False
+    pending_regenerate_id: str = ""
+
     # UI preferences (LocalStorage)
-    # CRITICAL: Store everything as strings in LocalStorage, convert to proper types via computed vars
-    # This avoids type mismatch errors during state hydration from browser
     selected_model: str = rx.LocalStorage("claude-sonnet-4-5")
-    temperature: str = rx.LocalStorage("0.7")  # String, not float!
-    enable_reasoning: str = rx.LocalStorage("false")  # String, not bool!
-    reasoning_budget: str = rx.LocalStorage("2000")  # String, not int!
+    temperature: str = rx.LocalStorage("0.7")
+    enable_reasoning: str = rx.LocalStorage("false")
+    reasoning_budget: str = rx.LocalStorage("2000")
     code_theme: str = rx.LocalStorage("nord")
     light_code_theme: str = rx.LocalStorage("github-light")
 
-    # Explicit setters for LocalStorage fields (required in Reflex 0.8.9+)
-    # CRITICAL: Convert all values to strings for LocalStorage compatibility
+    # Explicit setters for LocalStorage fields
     def set_selected_model(self, value):
-        """Set the selected AI model."""
-        logger.info(
-            f"[ChatState.set_selected_model] 🔧 Called with value={value!r} (type={type(value).__name__})"
-        )
-        logger.info(
-            f"[ChatState.set_selected_model] 📊 Current selected_model={self.selected_model!r} (type={type(self.selected_model).__name__})"
-        )
+        logger.info(f"[ChatState.set_selected_model] ✅ New selected_model={value!r}")
         self.selected_model = str(value)
-        logger.info(
-            f"[ChatState.set_selected_model] ✅ New selected_model={self.selected_model!r} (type={type(self.selected_model).__name__})"
-        )
 
     def set_temperature(self, value):
-        """Set the temperature for AI responses."""
-        logger.debug(
-            f"[ChatState.set_temperature] 🔧 Called with value={value!r} (type={type(value).__name__})"
-        )
         self.temperature = str(value)
-        logger.debug(f"[ChatState.set_temperature] ✅ Set to {self.temperature!r}")
 
     def set_enable_reasoning(self, value):
-        """Enable or disable extended reasoning mode."""
-        logger.debug(
-            f"[ChatState.set_enable_reasoning] 🔧 Called with value={value!r} (type={type(value).__name__})"
-        )
-        self.enable_reasoning = str(value).lower()  # Convert bool to 'true'/'false'
-        logger.debug(
-            f"[ChatState.set_enable_reasoning] ✅ Set to {self.enable_reasoning!r}"
-        )
+        self.enable_reasoning = str(value).lower()
 
     def set_reasoning_budget(self, value):
-        """Set the reasoning token budget."""
-        logger.debug(
-            f"[ChatState.set_reasoning_budget] 🔧 Called with value={value!r} (type={type(value).__name__})"
-        )
         self.reasoning_budget = str(value)
-        logger.debug(
-            f"[ChatState.set_reasoning_budget] ✅ Set to {self.reasoning_budget!r}"
-        )
 
     def set_code_theme(self, value):
-        """Set the code highlighting theme."""
-        logger.debug(
-            f"[ChatState.set_code_theme] 🔧 Called with value={value!r} (type={type(value).__name__})"
-        )
         self.code_theme = str(value)
-        logger.debug(f"[ChatState.set_code_theme] ✅ Set to {self.code_theme!r}")
 
     def set_light_code_theme(self, value):
-        """Set the light mode code highlighting theme."""
-        logger.debug(
-            f"[ChatState.set_light_code_theme] 🔧 Called with value={value!r} (type={type(value).__name__})"
-        )
         self.light_code_theme = str(value)
-        logger.debug(
-            f"[ChatState.set_light_code_theme] ✅ Set to {self.light_code_theme!r}"
-        )
 
     # ========================================================================
-    # TYPE CONVERSION COMPUTED VARS (String LocalStorage → Typed Values)
+    # TYPE CONVERSION COMPUTED VARS
     # ========================================================================
 
     @rx.var
     def temperature_float(self) -> float:
-        """Get temperature as float for LLM config."""
         try:
             return float(self.temperature)
         except (ValueError, TypeError):
@@ -150,12 +114,10 @@ class ChatState(rx.State):
 
     @rx.var
     def enable_reasoning_bool(self) -> bool:
-        """Get reasoning enabled as bool."""
         return str(self.enable_reasoning).lower() in ("true", "1", "yes")
 
     @rx.var
     def reasoning_budget_int(self) -> int:
-        """Get reasoning budget as int for comparisons."""
         try:
             return int(self.reasoning_budget)
         except (ValueError, TypeError):
@@ -167,16 +129,10 @@ class ChatState(rx.State):
 
     @rx.var
     def active_code_theme(self) -> str:
-        """Compile-safe active code theme.
-
-        Note: server-side compile does not always expose frontend color mode,
-        so default to dark theme here to avoid compile-time attribute errors.
-        """
         return self.code_theme
 
     @rx.var
     def model_display_name(self) -> str:
-        """Get a friendly display name for the selected model."""
         model_names = {
             "claude-sonnet-4-5": "Claude Sonnet 4.5",
             "claude-sonnet-4": "Claude Sonnet 4",
@@ -186,18 +142,11 @@ class ChatState(rx.State):
             "o1": "OpenAI o1",
             "o1-mini": "OpenAI o1 Mini",
         }
-        # Access the actual value from LocalStorage
         model = str(self.selected_model)
-        logger.debug(f"[model_display_name] 🏷️ Getting display name for model={model!r}")
         return model_names.get(model, model)
-
-    # ========================================================================
-    # COMPUTED PROPERTIES
-    # ========================================================================
 
     @rx.var
     def current_chat(self) -> Optional[Conversation]:
-        """Get the current conversation object."""
         for chat in self.chats:
             if chat.id == self.current_conversation_id:
                 return chat
@@ -205,7 +154,6 @@ class ChatState(rx.State):
 
     @rx.var
     def filtered_folders(self) -> list[ChatFolder]:
-        """Filter folders based on search."""
         if not self.sidebar_search:
             return self.folders
         search_lower = self.sidebar_search.lower()
@@ -221,40 +169,16 @@ class ChatState(rx.State):
         logger.info("[ChatState.on_load] 🚀 Page load triggered")
         logger.info("=" * 80)
 
-        # Log LocalStorage values at startup
-        logger.info("[ChatState.on_load] 📊 LocalStorage State:")
-        logger.info(
-            f"  - selected_model: {self.selected_model!r} (type={type(self.selected_model).__name__})"
-        )
-        logger.info(
-            f"  - temperature: {self.temperature!r} (type={type(self.temperature).__name__})"
-        )
-        logger.info(
-            f"  - enable_reasoning: {self.enable_reasoning!r} (type={type(self.enable_reasoning).__name__})"
-        )
-        logger.info(
-            f"  - reasoning_budget: {self.reasoning_budget!r} (type={type(self.reasoning_budget).__name__})"
-        )
-        logger.info(
-            f"  - code_theme: {self.code_theme!r} (type={type(self.code_theme).__name__})"
-        )
-
-        # Load messages using the pure Use Case
         use_case = LoadHistoryUseCase()
         with rx.session() as session:
             db_messages = await use_case.execute(session, self.current_conversation_id)
-            # ✅ CRITICAL FIX: Clone into pure in-memory objects
             self.messages = [Message(**m.model_dump()) for m in db_messages]
 
-        # Load sidebar data
         with rx.session() as session:
             db_folders = session.query(ChatFolder).all()
             db_chats = session.query(Conversation).all()
-            # ✅ CRITICAL FIX: Clone into pure in-memory objects
             self.folders = [ChatFolder(**f.model_dump()) for f in db_folders]
             self.chats = [Conversation(**c.model_dump()) for c in db_chats]
-
-        logger.info("[ChatState.on_load] ✅ Page load completed")
 
     # ========================================================================
     # UI EVENT HANDLERS (Synchronous / Fast Async)
@@ -267,37 +191,25 @@ class ChatState(rx.State):
         self.sidebar_search = value
 
     async def select_chat(self, chat_id: str):
-        """Select a different conversation."""
-        logger.info(f"[ChatState] Selecting chat: {chat_id}")
-
         self.current_conversation_id = chat_id
-
-        # Update title
         for chat in self.chats:
             if chat.id == chat_id:
                 self.current_chat_title = chat.title
                 break
 
-        # Load messages using the pure Use Case
         use_case = LoadHistoryUseCase()
         with rx.session() as session:
             db_messages = await use_case.execute(session, chat_id)
             self.messages = [Message(**m.model_dump()) for m in db_messages]
 
     def create_new_chat(self):
-        """Create a new conversation."""
-        logger.info("[ChatState] Creating new chat")
         new_id = str(uuid4())
-
-        # 1. Create a pure in-memory object for the UI
         new_chat = Conversation(id=new_id, title="New Chat")
 
-        # 2. Save a COPY to the database
         with rx.session() as session:
             session.add(Conversation(**new_chat.model_dump()))
             session.commit()
 
-        # 3. Append the pure object to the state
         self.chats.append(new_chat)
         self.chats = self.chats
         self.current_conversation_id = new_id
@@ -305,33 +217,15 @@ class ChatState(rx.State):
         self.messages = []
 
     def create_new_folder(self):
-        """Create a new folder."""
-        logger.info("[ChatState] Creating new folder")
         new_id = str(uuid4())
-
-        # 1. Create a pure in-memory object for the UI
         new_folder = ChatFolder(id=new_id, name="New Folder")
 
-        # 2. Save a COPY to the database
         with rx.session() as session:
             session.add(ChatFolder(**new_folder.model_dump()))
             session.commit()
 
-        # 3. Append the pure object to the state
         self.folders.append(new_folder)
         self.folders = self.folders
-
-    def delete_message(self, message_id: str):
-        """Delete a message."""
-        logger.info(f"[ChatState] Deleting message: {message_id}")
-
-        with rx.session() as session:
-            message = session.query(Message).filter(Message.id == message_id).first()
-            if message:
-                session.delete(message)
-                session.commit()
-
-        self.messages = [m for m in self.messages if m.id != message_id]
 
     # ========================================================================
     # CORE CHAT FUNCTIONALITY (Async with @rx.background)
@@ -388,16 +282,10 @@ class ChatState(rx.State):
             self.messages.append(ai_msg)
             self.messages = self.messages
 
-        # Step 3: Stream LLM response (WITH TYPEWRITER EFFECT)
+        # Step 3: Stream LLM response
         logger.info("-" * 80)
         logger.info("[ChatState] STEP 3: Streaming LLM response")
         logger.info("-" * 80)
-
-        llm_service = AppContainer.resolve_llm_service()
-        use_case = SendMessageUseCase(llm_service)
-
-        full_response = ""
-        chat_history = self.messages[:-2]
 
         # Get current model selection and config
         async with self:
@@ -405,24 +293,14 @@ class ChatState(rx.State):
             current_temp = self.temperature_float
             current_reasoning = self.enable_reasoning_bool
             current_budget = self.reasoning_budget_int
-            logger.info(
-                f"[ChatState] 📊 Selected model: {current_model!r} (type={type(current_model).__name__})"
-            )
-            logger.info(
-                f"[ChatState] 🌡️ Temperature: {current_temp!r} (type={type(current_temp).__name__})"
-            )
-            logger.info(
-                f"[ChatState] 🧠 Reasoning enabled: {current_reasoning!r} (type={type(current_reasoning).__name__})"
-            )
-            logger.info(
-                f"[ChatState] 💰 Reasoning budget: {current_budget!r} (type={type(current_budget).__name__})"
-            )
 
-        # Update DI container if model changed
-        logger.info(
-            f"[ChatState] 🔄 Ensuring correct adapter for model: {current_model}"
-        )
-        await self._ensure_correct_adapter(current_model)
+        # ✅ THE CLEAN ARCHITECTURE FIX:
+        # Ask the container for the service based on the string!
+        llm_service = AppContainer.resolve_llm_service(current_model)
+        use_case = SendMessageUseCase(llm_service)
+
+        full_response = ""
+        chat_history = self.messages[:-2]
 
         async for chunk in use_case.execute(
             conversation_id=self.current_conversation_id,
@@ -440,7 +318,7 @@ class ChatState(rx.State):
                 char_buffer += char
                 full_response += char
 
-                # FIX: Increased buffer from 12 to 40 to prevent React thrashing
+                # Buffer to prevent React thrashing
                 if len(char_buffer) >= 40:
                     async with self:
                         self.messages[-1].content = _close_open_code_block(
@@ -480,85 +358,237 @@ class ChatState(rx.State):
 
                 session.commit()
 
-            # Restore clean content (no appended ```) now that streaming is complete
             self.messages[-1].content = full_response
             self.is_generating = False
             self.messages = self.messages
 
-        logger.info("[ChatState] ✅ HANDLE_SEND_MESSAGE COMPLETED SUCCESSFULLY")
+        logger.info("[ChatState] ✅ HANDLE_SEND_MESSAGE COMPLETED")
 
     # ========================================================================
-    # PLACEHOLDER METHODS (Future Implementation)
+    # MESSAGE ACTIONS (Copy, Delete, Regenerate)
     # ========================================================================
 
     def copy_message(self, message_id: str):
-        """Copy message content to the user's clipboard."""
+        """Copy message content to clipboard and show a toast."""
+        # Find the message in memory (O(N) is fine for chat history)
+        message = next((m for m in self.messages if m.id == message_id), None)
+
+        if message:
+            logger.info(f"[ChatState] Copied message {message_id} to clipboard.")
+            # In Reflex, we return a list of events to execute in the browser
+            return [
+                rx.set_clipboard(message.content),
+                rx.toast.success("Copied to clipboard!", position="bottom-right"),
+            ]
+        return rx.toast.error("Message not found.", position="bottom-right")
+
+    def delete_message(self, message_id: str):
+        """Delete a message from DB and UI."""
+        if self.is_generating:
+            return rx.toast.warning(
+                "Cannot delete messages while AI is typing.", position="bottom-right"
+            )
+
+        logger.info(f"[ChatState] Deleting message: {message_id}")
+
+        # 1. Delete from Database
+        with rx.session() as session:
+            message = session.query(Message).filter(Message.id == message_id).first()
+            if message:
+                session.delete(message)
+                session.commit()
+
+        # 2. Update UI State
+        self.messages = [m for m in self.messages if m.id != message_id]
+        return rx.toast.info("Message deleted.", position="bottom-right")
+
+    # ========================================================================
+    # INLINE EDITING
+    # ========================================================================
+
+    def start_edit(self, message_id: str, current_content: str):
+        self.editing_message_id = message_id
+        self.edit_content = current_content
+
+    def cancel_edit(self):
+        self.editing_message_id = ""
+        self.edit_content = ""
+
+    def save_edit(self):
+        if not self.edit_content.strip():
+            return rx.toast.error("Message cannot be empty.")
+
+        with rx.session() as session:
+            message = (
+                session.query(Message)
+                .filter(Message.id == self.editing_message_id)
+                .first()
+            )
+            if message:
+                message.content = self.edit_content
+                session.commit()
+
         for m in self.messages:
-            if m.id == message_id:
-                return rx.set_clipboard(m.content)
-        return None
+            if m.id == self.editing_message_id:
+                m.content = self.edit_content
+                break
 
-    def regenerate_message(self, message_id: str):
-        pass
+        self.messages = self.messages
+        self.editing_message_id = ""
+
+        return self.request_regenerate(self.editing_message_id)
 
     # ========================================================================
-    # MODEL ADAPTER MANAGEMENT
+    # REGENERATE & TRUNCATE FLOW
     # ========================================================================
 
-    async def _ensure_correct_adapter(self, model):
-        """Ensure the correct adapter is registered for the selected model."""
-        import os
-        from mychat_reflex.infrastructure.llm_adapters import (
-            AnthropicAdapter,
-            OpenAIAdapter,
+    def request_regenerate(self, message_id: str):
+        if self.is_generating:
+            return rx.toast.warning("Already generating a response.")
+
+        target_idx = next(
+            (i for i, m in enumerate(self.messages) if m.id == message_id), -1
         )
+        if target_idx == -1:
+            return rx.toast.error("Message not found.")
 
-        logger.info(
-            f"[_ensure_correct_adapter] 🔍 Checking adapter for model={model!r} (type={type(model).__name__})"
-        )
+        target_msg = self.messages[target_idx]
+        is_destructive = False
 
-        current_service = AppContainer.resolve_llm_service()
-        current_model = getattr(current_service, "model", None)
-        logger.info(
-            f"[_ensure_correct_adapter] 📊 Current service model={current_model!r}"
-        )
-
-        # Convert model to string if needed (in case it's a LocalStorage proxy)
-        model_str = str(model)
-        logger.info(f"[_ensure_correct_adapter] 🔄 Converted to string: {model_str!r}")
-
-        # Skip if already using the correct model
-        if current_model == model_str:
-            logger.info(
-                f"[_ensure_correct_adapter] ✅ Already using {model_str}, no change needed"
-            )
-            return
-
-        logger.info(
-            f"[_ensure_correct_adapter] 🔄 Switching adapter from {current_model} to {model_str}"
-        )
-
-        # Determine which adapter to use
-        if model_str.startswith(("claude", "sonnet", "opus")):
-            api_key = os.getenv("ANTHROPIC_API_KEY", "")
-            adapter = AnthropicAdapter(api_key=api_key, model=model_str)
-            logger.info(
-                f"[_ensure_correct_adapter] 🤖 Created AnthropicAdapter for {model_str}"
-            )
-        elif model_str.startswith(("gpt", "o1", "o3")):
-            api_key = os.getenv("OPENAI_API_KEY", "")
-            adapter = OpenAIAdapter(api_key=api_key, model=model_str)
-            logger.info(
-                f"[_ensure_correct_adapter] 🤖 Created OpenAIAdapter for {model_str}"
-            )
+        if target_msg.role == "assistant":
+            if target_idx < len(self.messages) - 1:
+                is_destructive = True
         else:
-            logger.warning(
-                f"[_ensure_correct_adapter] ⚠️ Unknown model: {model_str}, keeping current adapter"
-            )
-            return
+            if target_idx < len(self.messages) - 2:
+                is_destructive = True
 
-        # Register the new adapter
-        AppContainer.register_llm_service(adapter)
-        logger.info(
-            f"[_ensure_correct_adapter] ✅ Successfully registered new adapter for {model_str}"
-        )
+        if is_destructive:
+            self.pending_regenerate_id = message_id
+            self.show_truncate_warning = True
+            return
+        else:
+            # FAST PATH: Pass the ID directly to avoid state sync race conditions
+            return ChatState.confirm_regenerate(message_id)
+
+    def cancel_regenerate(self):
+        self.show_truncate_warning = False
+        self.pending_regenerate_id = ""
+
+    @rx.event(background=True)
+    async def confirm_regenerate(self, direct_message_id: str = ""):
+        async with self:
+            self.show_truncate_warning = False
+            # Use direct ID if provided (fast path), otherwise use pending ID (modal path)
+            message_id = direct_message_id or self.pending_regenerate_id
+            self.pending_regenerate_id = ""
+
+            target_idx = next(
+                (i for i, m in enumerate(self.messages) if m.id == message_id), -1
+            )
+            if target_idx == -1:
+                yield rx.toast.error("Error: Could not find message to regenerate.")
+                return
+
+            target_msg = self.messages[target_idx]
+
+            if target_msg.role == "assistant":
+                if target_idx == 0 or self.messages[target_idx - 1].role != "user":
+                    yield rx.toast.error("Could not find the original user prompt.")
+                    return
+                prompt_text = self.messages[target_idx - 1].content
+                delete_from_idx = target_idx
+            else:
+                prompt_text = target_msg.content
+                delete_from_idx = target_idx + 1
+
+            messages_to_delete = self.messages[delete_from_idx:]
+            ids_to_delete = [m.id for m in messages_to_delete]
+
+            self.is_generating = True
+
+        if ids_to_delete:
+            with rx.session() as session:
+                session.query(Message).filter(Message.id.in_(ids_to_delete)).delete(
+                    synchronize_session=False
+                )
+                session.commit()
+
+        async with self:
+            self.messages = self.messages[:delete_from_idx]
+
+        new_ai_msg_id = str(uuid4())
+        async with self:
+            ai_msg = Message(
+                id=new_ai_msg_id,
+                conversation_id=self.current_conversation_id,
+                role="assistant",
+                content="",
+            )
+            self.messages.append(ai_msg)
+            self.messages = self.messages
+
+        # 4. Stream the new response
+        logger.info("[ChatState] Streaming regenerated response...")
+
+        async with self:
+            current_model = str(self.selected_model)
+            current_temp = self.temperature_float
+            current_reasoning = self.enable_reasoning_bool
+            current_budget = self.reasoning_budget_int
+
+        llm_service = AppContainer.resolve_llm_service(current_model)
+        use_case = SendMessageUseCase(llm_service)
+
+        full_response = ""
+        # History is everything BEFORE the user prompt
+        chat_history = self.messages[:-2]
+
+        async for chunk in use_case.execute(
+            conversation_id=self.current_conversation_id,
+            user_message=prompt_text,
+            history=chat_history,
+            config=LLMConfig(
+                temperature=current_temp,
+                enable_reasoning=current_reasoning,
+                reasoning_budget=current_budget,
+            ),
+        ):
+            char_buffer = ""
+            for char in chunk:
+                char_buffer += char
+                full_response += char
+
+                if len(char_buffer) >= 40:
+                    async with self:
+                        self.messages[-1].content = _close_open_code_block(
+                            full_response
+                        )
+                        self.messages = self.messages
+                    yield
+                    await asyncio.sleep(0.01)
+                    char_buffer = ""
+
+            if char_buffer:
+                async with self:
+                    self.messages[-1].content = _close_open_code_block(full_response)
+                    self.messages = self.messages
+                yield
+                await asyncio.sleep(0.01)
+
+        # 5. Save the final regenerated message to DB
+        async with self:
+            with rx.session() as session:
+                ai_msg_final = Message(
+                    id=new_ai_msg_id,
+                    conversation_id=self.current_conversation_id,
+                    role="assistant",
+                    content=full_response,
+                )
+                session.add(ai_msg_final)
+                session.commit()
+
+            self.messages[-1].content = full_response
+            self.is_generating = False
+            self.messages = self.messages
+
+        logger.info("[ChatState] ✅ REGENERATE COMPLETED")
