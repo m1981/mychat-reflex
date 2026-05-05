@@ -65,9 +65,10 @@ class SendMessageUseCase:
         transcript = ""
         for i, msg in enumerate(history):
             speaker = "User" if msg.is_user else "Assistant"
-            transcript += f"{speaker}: {msg.content}\n\n"
+            content = msg.content or ""
+            transcript += f"{speaker}: {content}\n\n"
             logger.debug(
-                f"[SendMessageUseCase] History[{i}] ({speaker}): {msg.content[:50]}..."
+                f"[SendMessageUseCase] History[{i}] ({speaker}): {content[:50]}..."
             )
 
         # Append the current message
