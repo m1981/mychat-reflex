@@ -145,12 +145,12 @@ class PrepRegenerationUseCase:
         logger.info(f"[PrepRegenerationUseCase] Preparing regeneration for msg: {target_message_id}")
 
         # 1. Fetch all messages in this conversation
-        messages = (
-            session.query(Message)
-            .filter(Message.conversation_id == conversation_id)
+        statement = (
+            select(Message)
+            .where(Message.conversation_id == conversation_id)
             .order_by(Message.created_at)
-            .all()
         )
+        messages = list(session.exec(statement).all())
 
         # 2. Find the target message
         target_idx = next((i for i, m in enumerate(messages) if m.id == target_message_id), -1)
@@ -175,7 +175,9 @@ class PrepRegenerationUseCase:
 
         if ids_to_delete:
             logger.info(f"[PrepRegenerationUseCase] Truncating {len(ids_to_delete)} messages from DB.")
-            session.query(Message).filter(Message.id.in_(ids_to_delete)).delete(synchronize_session=False)
+            delete_statement = select(Message).where(Message.id.in_(ids_to_delete))
+            for msg in session.exec(delete_statement).all():
+                session.delete(msg)
 
         # 5. Create the new AI placeholder in the database
         new_ai_msg_id = str(uuid4())
@@ -191,7 +193,8 @@ class PrepRegenerationUseCase:
         # 6. Return the clean data for the UI to use
         truncated_history = messages[:delete_from_idx]
 
-        # Detach from session to prevent DetachedInstanceError in UI
-        session.expunge_all()
+        # Make copies of the data to prevent DetachedInstanceError in UI
+        # This ensures the objects can be used after the session closes
+        truncated_history_copies = [Message(**msg.model_dump()) for msg in truncated_history]
 
-        return new_ai_msg_id, prompt_text, truncated_history
+        return new_ai_msg_id, prompt_text, truncated_history_copies
