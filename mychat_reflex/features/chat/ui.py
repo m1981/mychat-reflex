@@ -571,7 +571,7 @@ def truncate_warning_modal() -> rx.Component:
                     rx.button(
                         "Regenerate",
                         color_scheme="red",
-                        on_click=ChatState.confirm_regenerate,
+                        on_click=lambda: ChatState.confirm_regenerate(""),
                     ),
                 ),
                 spacing="3",
