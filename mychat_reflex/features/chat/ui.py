@@ -93,12 +93,12 @@ def message_actions(message: Message) -> rx.Component:
         # Edit button (Only for User messages)
         rx.cond(
             message.role == "user",
-            _btn("pencil", lambda: ChatState.start_edit(message.id, message.content)),
+            _btn("pencil", ChatState.start_edit(message.id, message.content)),
             rx.fragment(),
         ),
         _btn("trash-2", ChatState.delete_message(message.id)),
         # Regenerate button (Uses the new request_regenerate flow with the warning modal)
-        _btn("rotate-cw", lambda: ChatState.request_regenerate(message.id)),
+        _btn("rotate-cw", ChatState.request_regenerate(message.id)),
         class_name="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity",
     )
 

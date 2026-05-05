@@ -442,6 +442,7 @@ class ChatState(rx.State):
     # REGENERATE & TRUNCATE FLOW
     # ========================================================================
 
+    @rx.event
     def request_regenerate(self, message_id: str):
         if self.is_generating:
             return rx.toast.warning("Already generating a response.")
@@ -465,11 +466,12 @@ class ChatState(rx.State):
         if is_destructive:
             self.pending_regenerate_id = message_id
             self.show_truncate_warning = True
-            return
         else:
             # FAST PATH: Pass the ID directly to avoid state sync race conditions
-            return ChatState.confirm_regenerate(message_id)
+            self.pending_regenerate_id = message_id
+            return ChatState.confirm_regenerate
 
+    @rx.event
     def cancel_regenerate(self):
         self.show_truncate_warning = False
         self.pending_regenerate_id = ""
