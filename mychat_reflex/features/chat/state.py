@@ -442,7 +442,6 @@ class ChatState(rx.State):
     # REGENERATE & TRUNCATE FLOW
     # ========================================================================
 
-    @rx.event
     def request_regenerate(self, message_id: str):
         if self.is_generating:
             return rx.toast.warning("Already generating a response.")
@@ -467,22 +466,27 @@ class ChatState(rx.State):
             self.pending_regenerate_id = message_id
             self.show_truncate_warning = True
         else:
-            # FAST PATH: Pass the ID directly to avoid state sync race conditions
-            self.pending_regenerate_id = message_id
-            return ChatState.confirm_regenerate
+            # FAST PATH: Trigger regeneration immediately
+            return ChatState.confirm_regenerate(message_id)
 
-    @rx.event
     def cancel_regenerate(self):
         self.show_truncate_warning = False
         self.pending_regenerate_id = ""
 
     @rx.event(background=True)
-    async def confirm_regenerate(self, direct_message_id: str = ""):
+    async def confirm_regenerate(self, message_id: str = ""):
         """Execute the regeneration using pure Use Cases."""
         async with self:
             self.show_truncate_warning = False
-            message_id = direct_message_id or self.pending_regenerate_id
+            # Use the passed message_id, or fall back to pending_regenerate_id
+            target_message_id = message_id or self.pending_regenerate_id
             self.pending_regenerate_id = ""
+            
+            if not target_message_id:
+                yield rx.toast.error("No message ID provided for regeneration.")
+                self.is_generating = False
+                return
+                
             self.is_generating = True
 
         # 1. Execute Business Logic (DB Truncation) via Use Case
@@ -490,7 +494,7 @@ class ChatState(rx.State):
             prep_use_case = PrepRegenerationUseCase()
             try:
                 new_ai_msg_id, prompt_text, truncated_history = prep_use_case.execute(
-                    session, self.current_conversation_id, message_id
+                    session, self.current_conversation_id, target_message_id
                 )
             except ValueError as e:
                 yield rx.toast.error(str(e))
